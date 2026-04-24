@@ -1,0 +1,1 @@
+"""vigilante-api application package."""

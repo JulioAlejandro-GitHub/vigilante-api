@@ -1,0 +1,68 @@
+{
+  "event_id": "evt_rec_identity_conflict_001",
+  "event_type": "identity_conflict",
+  "event_version": "1.0",
+  "occurred_at": "2026-05-10T13:09:45.123Z",
+  "emitted_at": "2026-05-10T13:09:45.223Z",
+  "source": {
+    "component": "vigilante-recognition",
+    "instance": "local-worker",
+    "version": "0.1.0"
+  },
+  "payload": {
+    "severity": "high",
+    "confidence": 0.89,
+    "decision_reason": [
+      "identity_signals_incompatible",
+      "cross_camera_candidate_strong",
+      "human_review_required"
+    ],
+    "evidence_refs": [
+      "tests/fixtures/images/face_identified.jpg"
+    ],
+    "requires_human_review": true,
+    "review_type": "identity_conflict",
+    "conflict_type": "incompatible_identity_signals",
+    "current_subject_id": "33333333-3333-3333-3333-333333333345",
+    "current_track_id": "22222222-2222-2222-2222-222222222245",
+    "current_identity": {
+      "person_profile_id": "44444444-4444-4444-4444-444444444441",
+      "full_name": "Barack Obama (dev fixture)",
+      "match_confidence": 0.89
+    },
+    "candidate_identity": {
+      "person_profile_id": "44444444-4444-4444-4444-444444444442",
+      "full_name": "Joe Biden (dev fixture)"
+    },
+    "identity_gap": 0.03,
+    "cross_camera_assessment": {
+      "evaluated_candidates": 1,
+      "decision_reason": [
+        "identity_conflict_detected"
+      ]
+    },
+    "semantic_descriptor": {
+      "backend": "simple_color_signature_v1",
+      "descriptor_backend": "simple_color_signature_v1",
+      "appearance": {
+        "dominant_palette": [
+          "gray",
+          "blue",
+          "black"
+        ]
+      }
+    },
+    "generation_trace": {
+      "pipeline": "recognition.worker.slice1",
+      "step": "conflict_resolution"
+    }
+  },
+  "context": {
+    "camera_id": "11111111-1111-1111-1111-111111111105",
+    "track_id": "22222222-2222-2222-2222-222222222245",
+    "subject_id": "33333333-3333-3333-3333-333333333345",
+    "organization_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+    "site_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
+    "idempotency_key": "recognition:evt_rec_identity_conflict_001"
+  }
+}
