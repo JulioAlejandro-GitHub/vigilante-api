@@ -84,6 +84,7 @@ def create_audit_timeline_event(
         source_event_id=source_event_id,
         event_type=event_type,
         event_ts=event_ts,
+        case_id=case_id,
         camera_id=camera_id,
         subject_id=subject_id,
         track_id=track_id,

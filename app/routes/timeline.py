@@ -17,6 +17,7 @@ def get_timeline(
     subject_id: str | None = None,
     organization_id: str | None = None,
     site_id: str | None = None,
+    case_id: str | None = None,
     limit: int = Query(default=get_settings().default_query_limit, ge=1),
     session: Session = Depends(session_dependency),
 ) -> list[TimelineEventRead]:
@@ -28,6 +29,7 @@ def get_timeline(
         subject_id=subject_id,
         organization_id=organization_id,
         site_id=site_id,
+        case_id=case_id,
     )
 
 

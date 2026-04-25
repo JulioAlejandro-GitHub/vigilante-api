@@ -1,6 +1,6 @@
 # vigilante-api
 
-Slice 2 funcional de `vigilante-api` sobre la base del Slice 1.
+Slice 3 funcional de `vigilante-api` sobre la base de los Slice 1 y 2.
 
 ## Qué implementa
 
@@ -14,11 +14,16 @@ Slice 2 funcional de `vigilante-api` sobre la base del Slice 1.
 - resolución operativa de identity conflicts;
 - resolución operativa de case suggestions;
 - promoción idempotente de case suggestions aceptadas a `api.case_record`;
-- auditoría de todas las decisiones y promociones en timeline.
+- lifecycle básico del caso maestro;
+- cambio de estado, cierre y reapertura de `case_record`;
+- notas humanas mínimas sobre el caso;
+- historial case-centric con acciones operativas, notas y relaciones;
+- consultas de reviews, suggestions y eventos origen relacionados a un caso;
+- auditoría de todas las decisiones, promociones y acciones de caso en timeline.
 
 ## Decisión de diseño sobre la BD real
 
-La base instalada de `vigilante_api` trae `api.timeline_event`, `api.manual_review`, `api.manual_review_action`, `api.case_record` y `api.case_item`.
+La base instalada de `vigilante_api` trae `api.timeline_event`, `api.manual_review`, `api.manual_review_action`, `api.case_record`, `api.case_item`, `api.case_note` y `api.case_status_history`.
 
 En este slice:
 
@@ -27,7 +32,13 @@ En este slice:
   - evento base de recognition;
   - últimos eventos operativos de `vigilante-api`;
 - `api.manual_review` no se usa como storage principal todavía porque exige `case_id`, y los reviews ingeridos desde recognition llegan antes del caso maestro;
-- `api.case_record` sí se usa como tabla real y canónica al promover una suggestion aceptada.
+- `api.case_record` sí se usa como tabla real y canónica al promover una suggestion aceptada;
+- `api.case_note` se usa para notas humanas; el autor textual se audita en timeline porque el schema real solo trae `author_user_id`;
+- `api.case_status_history` se usa para cambios de estado con valores compatibles con el check real;
+- `case_record.case_status` usa nombres válidos del baseline. La API expone `in_review`, `closed` y `reopened` como lifecycle lógico:
+  - `in_review` se guarda como `under_review`;
+  - `closed` se guarda como `resolved` más `closed_at` y metadata de lifecycle;
+  - `reopened` se guarda como `open` más metadata de lifecycle.
 
 ## Eventos de entrada soportados
 
@@ -45,6 +56,10 @@ En este slice:
 - `identity_conflict_resolved`
 - `case_suggestion_resolved`
 - `case_record_created`
+- `case_status_changed`
+- `case_note_added`
+- `case_closed`
+- `case_reopened`
 
 ## Endpoints
 
@@ -74,6 +89,17 @@ En este slice:
 
 - `GET /api/v1/cases`
 - `GET /api/v1/cases/{case_id}`
+- `POST /api/v1/cases/{case_id}/status`
+- `POST /api/v1/cases/{case_id}/close`
+- `POST /api/v1/cases/{case_id}/reopen`
+- `GET /api/v1/cases/{case_id}/timeline`
+- `GET /api/v1/cases/{case_id}/reviews`
+- `GET /api/v1/cases/{case_id}/suggestions`
+
+### Case notes
+
+- `GET /api/v1/cases/{case_id}/notes`
+- `POST /api/v1/cases/{case_id}/notes`
 
 ## Variables de entorno
 
@@ -151,13 +177,51 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Nota: el schema real de `api.case_record.case_type` no acepta `unresolved_subject_case`; el servicio lo mapea a `multi_event_tracking` y preserva el valor pedido en metadata.
 
-## Flujo mínimo del Slice 2
+### Cambiar estado del caso
+
+```json
+{
+  "status": "in_review",
+  "reason": "analyst started evaluation",
+  "changed_by": "julio"
+}
+```
+
+### Cerrar caso
+
+```json
+{
+  "reason": "sufficient evidence collected and handled",
+  "changed_by": "julio"
+}
+```
+
+### Reabrir caso
+
+```json
+{
+  "reason": "new evidence arrived",
+  "changed_by": "julio"
+}
+```
+
+### Agregar nota al caso
+
+```json
+{
+  "author": "julio",
+  "note_text": "Analyst note about recurring unresolved subject"
+}
+```
+
+## Flujo mínimo del Slice 3
 
 1. Ingerir evento de recognition por fixture.
 2. Consultar `manual-reviews` o `case-suggestions`.
 3. Resolver la entidad operativa por POST.
 4. Si la suggestion queda aceptada, promoverla a `case_record`.
-5. Consultar `cases` y `timeline` para auditar el resultado.
+5. Cambiar estado, agregar notas, cerrar o reabrir el caso.
+6. Consultar `cases`, `cases/{case_id}/timeline`, `cases/{case_id}/reviews`, `cases/{case_id}/suggestions` y `timeline` para auditar el resultado.
 
 ## Ejemplos rápidos
 
@@ -172,5 +236,22 @@ curl -X POST http://127.0.0.1:8000/api/v1/case-suggestions/<suggestion_id>/promo
   -H 'content-type: application/json' \
   -d '{"resolved_by":"julio","case_type":"unresolved_subject_case","title":"Recurring unidentified subject","priority":"medium","severity":"medium"}'
 curl http://127.0.0.1:8000/api/v1/cases
+curl http://127.0.0.1:8000/api/v1/cases/<case_id>
+curl -X POST http://127.0.0.1:8000/api/v1/cases/<case_id>/status \
+  -H 'content-type: application/json' \
+  -d '{"status":"in_review","reason":"analyst started evaluation","changed_by":"julio"}'
+curl -X POST http://127.0.0.1:8000/api/v1/cases/<case_id>/notes \
+  -H 'content-type: application/json' \
+  -d '{"author":"julio","note_text":"Analyst note about recurring unresolved subject"}'
+curl -X POST http://127.0.0.1:8000/api/v1/cases/<case_id>/close \
+  -H 'content-type: application/json' \
+  -d '{"reason":"sufficient evidence collected and handled","changed_by":"julio"}'
+curl -X POST http://127.0.0.1:8000/api/v1/cases/<case_id>/reopen \
+  -H 'content-type: application/json' \
+  -d '{"reason":"new evidence arrived","changed_by":"julio"}'
+curl http://127.0.0.1:8000/api/v1/cases/<case_id>/notes
+curl http://127.0.0.1:8000/api/v1/cases/<case_id>/timeline
+curl http://127.0.0.1:8000/api/v1/cases/<case_id>/reviews
+curl http://127.0.0.1:8000/api/v1/cases/<case_id>/suggestions
 curl http://127.0.0.1:8000/api/v1/timeline
 ```

@@ -54,6 +54,7 @@ class CaseRecordRead(BaseModel):
     case_type: str
     title: str
     status: str
+    db_status: str
     priority: int
     severity: str
     source_suggestion_id: str | None = None
@@ -61,6 +62,8 @@ class CaseRecordRead(BaseModel):
     primary_subject_id: str | None = None
     primary_camera_id: str | None = None
     opened_at: datetime
+    closed_at: datetime | None = None
+    updated_at: datetime
     organization_id: str | None = None
     site_id: str | None = None
     case_payload: dict[str, Any] = Field(default_factory=dict)
@@ -166,6 +169,15 @@ def create_case_from_suggestion(
             note="Slice 2 source suggestion",
         )
     )
+    session.add(
+        CaseItem(
+            case_id=case_id,
+            item_type="recognition_event",
+            item_ref_text=suggestion.source_event_id,
+            is_primary=True,
+            note="Source recognition event for accepted case suggestion",
+        )
+    )
     subject_uuid = parse_uuid(suggestion.subject_id)
     if subject_uuid is not None:
         session.add(
@@ -189,10 +201,15 @@ def list_cases(session: Session, *, limit: int) -> list[CaseRecordRead]:
 
 
 def get_case(session: Session, case_id: str) -> CaseRecordRead:
+    record = get_case_record_model(session, case_id)
+    return read_case_record(record)
+
+
+def get_case_record_model(session: Session, case_id: str) -> CaseRecord:
     record = session.get(CaseRecord, parse_uuid(case_id))
     if record is None:
         raise WorkflowNotFoundError("Case record not found")
-    return read_case_record(record)
+    return record
 
 
 def read_case_record(record: CaseRecord) -> CaseRecordRead:
@@ -202,7 +219,8 @@ def read_case_record(record: CaseRecord) -> CaseRecordRead:
         case_code=record.case_code,
         case_type=record.case_type,
         title=record.title,
-        status=record.case_status,
+        status=case_lifecycle_status(record),
+        db_status=record.case_status,
         priority=int(record.priority),
         severity=record.severity,
         source_suggestion_id=as_str(metadata.get("source_suggestion_id")),
@@ -210,7 +228,19 @@ def read_case_record(record: CaseRecord) -> CaseRecordRead:
         primary_subject_id=as_str(record.primary_observed_subject_id),
         primary_camera_id=as_str(record.primary_camera_id),
         opened_at=record.opened_at,
+        closed_at=record.closed_at,
+        updated_at=record.updated_at,
         organization_id=as_str(record.organization_id),
         site_id=as_str(record.site_id),
         case_payload=metadata,
     )
+
+
+def case_lifecycle_status(record: CaseRecord) -> str:
+    metadata = dict(record.case_metadata or {})
+    lifecycle_status = as_str(metadata.get("lifecycle_status"))
+    if lifecycle_status:
+        return lifecycle_status
+    if record.case_status == "under_review":
+        return "in_review"
+    return record.case_status

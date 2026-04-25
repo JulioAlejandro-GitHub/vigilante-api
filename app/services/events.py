@@ -52,6 +52,7 @@ class TimelineEventRead(BaseModel):
     source_event_id: str
     event_type: str
     event_ts: datetime
+    case_id: str | None = None
     camera_id: str | None = None
     subject_id: str | None = None
     track_id: str | None = None
@@ -356,9 +357,14 @@ def build_ingestion_result(record: TimelineEvent, *, status: Literal["applied", 
 def read_timeline_record(record: TimelineEvent) -> TimelineEventRead:
     stored = record.payload.get("timeline_projection")
     if stored:
-        return TimelineEventRead.model_validate(stored)
+        projection = TimelineEventRead.model_validate(stored)
+        if projection.case_id is None:
+            projection.case_id = as_str(record.case_id)
+        return projection
     source_event = RecognitionEventEnvelope.model_validate(record.payload.get("source_event", {}))
-    return build_timeline_projection(source_event, source_component=record.source_component)
+    projection = build_timeline_projection(source_event, source_component=record.source_component)
+    projection.case_id = as_str(record.case_id)
+    return projection
 
 
 def read_manual_review_record(record: TimelineEvent) -> ManualReviewRead | None:
@@ -414,12 +420,16 @@ def list_timeline(
     subject_id: str | None = None,
     organization_id: str | None = None,
     site_id: str | None = None,
+    case_id: str | None = None,
 ) -> list[TimelineEventRead]:
     settings = get_settings()
     safe_limit = max(1, min(limit, settings.max_query_limit))
     stmt = select(TimelineEvent).order_by(TimelineEvent.occurred_at.desc())
     if event_type:
         stmt = stmt.where(TimelineEvent.event_type == event_type)
+    parsed_case_id = parse_uuid(case_id)
+    if parsed_case_id is not None:
+        stmt = stmt.where(TimelineEvent.case_id == parsed_case_id)
     rows = list(session.scalars(stmt.limit(settings.max_query_limit)).all())
     items = [read_timeline_record(row) for row in rows]
     return _filter_timeline_items(
