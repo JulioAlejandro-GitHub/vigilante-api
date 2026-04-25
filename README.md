@@ -1,6 +1,6 @@
 # vigilante-api
 
-Slice 3 funcional de `vigilante-api` sobre la base de los Slice 1 y 2.
+Slice 4 funcional de `vigilante-api` sobre la base de los Slice 1, 2 y 3.
 
 ## Qué implementa
 
@@ -17,6 +17,10 @@ Slice 3 funcional de `vigilante-api` sobre la base de los Slice 1 y 2.
 - lifecycle básico del caso maestro;
 - cambio de estado, cierre y reapertura de `case_record`;
 - notas humanas mínimas sobre el caso;
+- assignment y ownership textual básico del caso;
+- filtros y paginación simple para casos, manual reviews y case suggestions;
+- detalle enriquecido de caso para consumo de `vigilante-web`;
+- resumen mínimo de dashboard/work queues;
 - historial case-centric con acciones operativas, notas y relaciones;
 - consultas de reviews, suggestions y eventos origen relacionados a un caso;
 - auditoría de todas las decisiones, promociones y acciones de caso en timeline.
@@ -35,6 +39,7 @@ En este slice:
 - `api.case_record` sí se usa como tabla real y canónica al promover una suggestion aceptada;
 - `api.case_note` se usa para notas humanas; el autor textual se audita en timeline porque el schema real solo trae `author_user_id`;
 - `api.case_status_history` se usa para cambios de estado con valores compatibles con el check real;
+- la asignación textual vive en `case_record.metadata.assignment` para no escribir UUIDs arbitrarios en `assigned_to_user_id` sin auth/users reales;
 - `case_record.case_status` usa nombres válidos del baseline. La API expone `in_review`, `closed` y `reopened` como lifecycle lógico:
   - `in_review` se guarda como `under_review`;
   - `closed` se guarda como `resolved` más `closed_at` y metadata de lifecycle;
@@ -60,6 +65,9 @@ En este slice:
 - `case_note_added`
 - `case_closed`
 - `case_reopened`
+- `case_assigned`
+- `case_reassigned`
+- `case_unassigned`
 
 ## Endpoints
 
@@ -78,6 +86,8 @@ En este slice:
 - `GET /api/v1/manual-reviews/{review_id}`
 - `POST /api/v1/manual-reviews/{review_id}/resolve`
 
+Filtros soportados en el listado: `status`, `review_type`, `priority`, `subject_id`, `camera_id`, `limit`, `offset`.
+
 ### Case suggestions
 
 - `GET /api/v1/case-suggestions`
@@ -85,10 +95,14 @@ En este slice:
 - `POST /api/v1/case-suggestions/{suggestion_id}/resolve`
 - `POST /api/v1/case-suggestions/{suggestion_id}/promote`
 
+Filtros soportados en el listado: `status`, `suggestion_type`, `camera_id`, `subject_id`, `limit`, `offset`.
+
 ### Cases
 
 - `GET /api/v1/cases`
 - `GET /api/v1/cases/{case_id}`
+- `POST /api/v1/cases/{case_id}/assign`
+- `POST /api/v1/cases/{case_id}/unassign`
 - `POST /api/v1/cases/{case_id}/status`
 - `POST /api/v1/cases/{case_id}/close`
 - `POST /api/v1/cases/{case_id}/reopen`
@@ -96,10 +110,22 @@ En este slice:
 - `GET /api/v1/cases/{case_id}/reviews`
 - `GET /api/v1/cases/{case_id}/suggestions`
 
+Filtros soportados en el listado: `status`, `assigned_to`, `priority`, `severity`, `case_type`, `organization_id`, `site_id`, `q`, `limit`, `offset`.
+
+Orden soportado: `sort_by=updated_at|opened_at|priority` y `sort_order=asc|desc`.
+
+`GET /api/v1/cases/{case_id}` devuelve detalle enriquecido con datos base, assignment actual, notas recientes, reviews relacionadas, suggestions relacionadas y timeline relacionado.
+
 ### Case notes
 
 - `GET /api/v1/cases/{case_id}/notes`
 - `POST /api/v1/cases/{case_id}/notes`
+
+### Dashboard
+
+- `GET /api/v1/dashboard/summary`
+
+Filtro opcional: `assigned_to`.
 
 ## Variables de entorno
 
@@ -214,14 +240,34 @@ Nota: el schema real de `api.case_record.case_type` no acepta `unresolved_subjec
 }
 ```
 
-## Flujo mínimo del Slice 3
+### Asignar caso
+
+```json
+{
+  "assigned_to": "julio",
+  "assigned_by": "julio",
+  "assignment_reason": "analyst taking ownership"
+}
+```
+
+### Desasignar caso
+
+```json
+{
+  "assigned_by": "julio",
+  "assignment_reason": "returning to unassigned queue"
+}
+```
+
+## Flujo mínimo del Slice 4
 
 1. Ingerir evento de recognition por fixture.
 2. Consultar `manual-reviews` o `case-suggestions`.
 3. Resolver la entidad operativa por POST.
 4. Si la suggestion queda aceptada, promoverla a `case_record`.
 5. Cambiar estado, agregar notas, cerrar o reabrir el caso.
-6. Consultar `cases`, `cases/{case_id}/timeline`, `cases/{case_id}/reviews`, `cases/{case_id}/suggestions` y `timeline` para auditar el resultado.
+6. Asignar, reasignar o desasignar el caso.
+7. Consultar `cases` con filtros, detalle enriquecido, timeline case-centric y dashboard summary para alimentar UI.
 
 ## Ejemplos rápidos
 
@@ -236,7 +282,14 @@ curl -X POST http://127.0.0.1:8000/api/v1/case-suggestions/<suggestion_id>/promo
   -H 'content-type: application/json' \
   -d '{"resolved_by":"julio","case_type":"unresolved_subject_case","title":"Recurring unidentified subject","priority":"medium","severity":"medium"}'
 curl http://127.0.0.1:8000/api/v1/cases
+curl 'http://127.0.0.1:8000/api/v1/cases?status=in_review&assigned_to=julio&limit=25&offset=0&sort_by=updated_at'
 curl http://127.0.0.1:8000/api/v1/cases/<case_id>
+curl -X POST http://127.0.0.1:8000/api/v1/cases/<case_id>/assign \
+  -H 'content-type: application/json' \
+  -d '{"assigned_to":"julio","assigned_by":"julio","assignment_reason":"analyst taking ownership"}'
+curl -X POST http://127.0.0.1:8000/api/v1/cases/<case_id>/unassign \
+  -H 'content-type: application/json' \
+  -d '{"assigned_by":"julio","assignment_reason":"returning to unassigned queue"}'
 curl -X POST http://127.0.0.1:8000/api/v1/cases/<case_id>/status \
   -H 'content-type: application/json' \
   -d '{"status":"in_review","reason":"analyst started evaluation","changed_by":"julio"}'
@@ -253,5 +306,8 @@ curl http://127.0.0.1:8000/api/v1/cases/<case_id>/notes
 curl http://127.0.0.1:8000/api/v1/cases/<case_id>/timeline
 curl http://127.0.0.1:8000/api/v1/cases/<case_id>/reviews
 curl http://127.0.0.1:8000/api/v1/cases/<case_id>/suggestions
+curl 'http://127.0.0.1:8000/api/v1/manual-reviews?status=pending&priority=3&limit=25&offset=0'
+curl 'http://127.0.0.1:8000/api/v1/case-suggestions?status=pending&limit=25&offset=0'
+curl 'http://127.0.0.1:8000/api/v1/dashboard/summary?assigned_to=julio'
 curl http://127.0.0.1:8000/api/v1/timeline
 ```

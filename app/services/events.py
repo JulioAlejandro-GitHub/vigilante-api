@@ -466,7 +466,10 @@ def list_manual_reviews(
     session: Session,
     *,
     limit: int,
+    offset: int = 0,
+    status: str | None = None,
     review_type: str | None = None,
+    priority: int | None = None,
     camera_id: str | None = None,
     subject_id: str | None = None,
 ) -> list[ManualReviewRead]:
@@ -475,7 +478,10 @@ def list_manual_reviews(
     return _list_manual_reviews(
         session,
         limit=limit,
+        offset=offset,
+        status=status,
         review_type=review_type,
+        priority=priority,
         camera_id=camera_id,
         subject_id=subject_id,
     )
@@ -491,6 +497,8 @@ def list_case_suggestions(
     session: Session,
     *,
     limit: int,
+    offset: int = 0,
+    status: str | None = None,
     suggestion_type: str | None = None,
     camera_id: str | None = None,
     subject_id: str | None = None,
@@ -500,6 +508,8 @@ def list_case_suggestions(
     return _list_case_suggestions(
         session,
         limit=limit,
+        offset=offset,
+        status=status,
         suggestion_type=suggestion_type,
         camera_id=camera_id,
         subject_id=subject_id,

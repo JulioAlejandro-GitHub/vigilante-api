@@ -21,15 +21,19 @@ router = APIRouter(prefix="/api/v1/case-suggestions", tags=["case-suggestions"])
 
 @router.get("", response_model=list[CaseSuggestionRead])
 def get_case_suggestion_queue(
+    status: str | None = None,
     suggestion_type: str | None = None,
     camera_id: str | None = None,
     subject_id: str | None = None,
     limit: int = Query(default=get_settings().default_query_limit, ge=1),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(session_dependency),
 ) -> list[CaseSuggestionRead]:
     return list_case_suggestions(
         session,
         limit=limit,
+        offset=offset,
+        status=status,
         suggestion_type=suggestion_type,
         camera_id=camera_id,
         subject_id=subject_id,

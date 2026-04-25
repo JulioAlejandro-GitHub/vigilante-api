@@ -14,16 +14,22 @@ router = APIRouter(prefix="/api/v1/manual-reviews", tags=["manual-reviews"])
 
 @router.get("", response_model=list[ManualReviewRead])
 def get_manual_review_queue(
+    status: str | None = None,
     review_type: str | None = None,
+    priority: int | None = Query(default=None, ge=1, le=5),
     camera_id: str | None = None,
     subject_id: str | None = None,
     limit: int = Query(default=get_settings().default_query_limit, ge=1),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(session_dependency),
 ) -> list[ManualReviewRead]:
     return list_manual_reviews(
         session,
         limit=limit,
+        offset=offset,
+        status=status,
         review_type=review_type,
+        priority=priority,
         camera_id=camera_id,
         subject_id=subject_id,
     )

@@ -179,7 +179,7 @@ def _timeline_row_related_to_case(
 
 
 def _payload_case_id(payload: dict[str, Any]) -> str | None:
-    for key in ("case_lifecycle_action", "case_note_added", "case_record_created", "action_event"):
+    for key in ("case_lifecycle_action", "case_note_added", "case_record_created", "case_assignment", "action_event"):
         value = payload.get(key)
         if not isinstance(value, dict):
             continue

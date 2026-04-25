@@ -64,6 +64,10 @@ class CaseRecordRead(BaseModel):
     opened_at: datetime
     closed_at: datetime | None = None
     updated_at: datetime
+    assigned_to: str | None = None
+    assigned_by: str | None = None
+    assigned_at: datetime | None = None
+    assignment_reason: str | None = None
     organization_id: str | None = None
     site_id: str | None = None
     case_payload: dict[str, Any] = Field(default_factory=dict)
@@ -214,6 +218,7 @@ def get_case_record_model(session: Session, case_id: str) -> CaseRecord:
 
 def read_case_record(record: CaseRecord) -> CaseRecordRead:
     metadata = dict(record.case_metadata or {})
+    assignment = read_case_assignment(record)
     return CaseRecordRead(
         case_id=str(record.case_id),
         case_code=record.case_code,
@@ -230,6 +235,10 @@ def read_case_record(record: CaseRecord) -> CaseRecordRead:
         opened_at=record.opened_at,
         closed_at=record.closed_at,
         updated_at=record.updated_at,
+        assigned_to=assignment.get("assigned_to"),
+        assigned_by=assignment.get("assigned_by"),
+        assigned_at=_parse_datetime(assignment.get("assigned_at")),
+        assignment_reason=assignment.get("assignment_reason"),
         organization_id=as_str(record.organization_id),
         site_id=as_str(record.site_id),
         case_payload=metadata,
@@ -244,3 +253,30 @@ def case_lifecycle_status(record: CaseRecord) -> str:
     if record.case_status == "under_review":
         return "in_review"
     return record.case_status
+
+
+def read_case_assignment(record: CaseRecord) -> dict[str, str | None]:
+    metadata = dict(record.case_metadata or {})
+    assignment = metadata.get("assignment")
+    if not isinstance(assignment, dict):
+        return {
+            "assigned_to": None,
+            "assigned_by": None,
+            "assigned_at": None,
+            "assignment_reason": None,
+        }
+    return {
+        "assigned_to": as_str(assignment.get("assigned_to")),
+        "assigned_by": as_str(assignment.get("assigned_by")),
+        "assigned_at": as_str(assignment.get("assigned_at")),
+        "assignment_reason": as_str(assignment.get("assignment_reason")),
+    }
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None

@@ -37,12 +37,15 @@ def list_case_suggestions(
     session: Session,
     *,
     limit: int,
+    offset: int = 0,
+    status: str | None = None,
     suggestion_type: str | None = None,
     camera_id: str | None = None,
     subject_id: str | None = None,
 ) -> list[CaseSuggestionRead]:
     settings = get_settings()
     safe_limit = max(1, min(limit, settings.max_query_limit))
+    safe_offset = max(0, offset)
     base_rows = list_timeline_rows(
         session,
         event_types=CASE_SUGGESTION_EVENT_TYPES,
@@ -98,6 +101,8 @@ def list_case_suggestions(
     items.sort(key=lambda item: item.promoted_at or item.resolved_at or item.event_ts, reverse=True)
     filtered = []
     for item in items:
+        if status and item.status != status:
+            continue
         if suggestion_type and item.suggestion_type != suggestion_type:
             continue
         if camera_id and item.camera_id != camera_id:
@@ -105,7 +110,7 @@ def list_case_suggestions(
         if subject_id and item.subject_id != subject_id:
             continue
         filtered.append(item)
-    return filtered[:safe_limit]
+    return filtered[safe_offset : safe_offset + safe_limit]
 
 
 def get_case_suggestion(session: Session, suggestion_id: str) -> CaseSuggestionRead | None:
