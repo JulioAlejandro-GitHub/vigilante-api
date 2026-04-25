@@ -1,0 +1,10 @@
+{
+  "resolved_by": "julio",
+  "case_type": "unresolved_subject_case",
+  "title": "Recurring unidentified subject",
+  "priority": "medium",
+  "severity": "medium",
+  "case_payload": {
+    "created_from": "slice2_test"
+  }
+}

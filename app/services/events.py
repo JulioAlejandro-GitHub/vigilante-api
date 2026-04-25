@@ -67,6 +67,7 @@ class TimelineEventRead(BaseModel):
 class ManualReviewRead(BaseModel):
     review_id: str
     source_event_id: str
+    source_event_type: str
     review_type: str
     status: str
     priority: int
@@ -79,11 +80,18 @@ class ManualReviewRead(BaseModel):
     event_ts: datetime
     reason_summary: str
     payload: dict[str, Any] = Field(default_factory=dict)
+    decision: str | None = None
+    decision_reason: str | None = None
+    resolved_by: str | None = None
+    resolved_at: datetime | None = None
+    resolution_payload: dict[str, Any] = Field(default_factory=dict)
+    resolution_event_id: str | None = None
 
 
 class CaseSuggestionRead(BaseModel):
     suggestion_id: str
     source_event_id: str
+    source_event_type: str
     suggestion_type: str
     status: str
     subject_id: str | None = None
@@ -95,6 +103,14 @@ class CaseSuggestionRead(BaseModel):
     evidence_count: int
     reason_summary: str
     payload: dict[str, Any] = Field(default_factory=dict)
+    decision: str | None = None
+    decision_reason: str | None = None
+    resolved_by: str | None = None
+    resolved_at: datetime | None = None
+    resolution_payload: dict[str, Any] = Field(default_factory=dict)
+    resolution_event_id: str | None = None
+    promoted_case_id: str | None = None
+    promoted_at: datetime | None = None
 
 
 class IngestionResult(BaseModel):
@@ -219,6 +235,7 @@ def build_manual_review_projection(event: RecognitionEventEnvelope) -> ManualRev
     return ManualReviewRead(
         review_id=str(review_id),
         source_event_id=event.event_id,
+        source_event_type=event.event_type,
         review_type=review_type,
         status="pending",
         priority=severity_to_priority(str(event.payload.get("severity", "medium"))),
@@ -250,6 +267,7 @@ def build_case_suggestion_projection(event: RecognitionEventEnvelope) -> CaseSug
     return CaseSuggestionRead(
         suggestion_id=str(suggestion_id),
         source_event_id=event.event_id,
+        source_event_type=event.event_type,
         suggestion_type=suggestion_type,
         status="pending",
         subject_id=as_str(event.context.get("subject_id")),
@@ -346,6 +364,17 @@ def read_timeline_record(record: TimelineEvent) -> TimelineEventRead:
 def read_manual_review_record(record: TimelineEvent) -> ManualReviewRead | None:
     stored = record.payload.get("manual_review_projection")
     if stored:
+        if "source_event_type" not in stored:
+            stored = {
+                **stored,
+                "source_event_type": record.event_type,
+                "decision": stored.get("decision"),
+                "decision_reason": stored.get("decision_reason"),
+                "resolved_by": stored.get("resolved_by"),
+                "resolved_at": stored.get("resolved_at"),
+                "resolution_payload": stored.get("resolution_payload", {}),
+                "resolution_event_id": stored.get("resolution_event_id"),
+            }
         return ManualReviewRead.model_validate(stored)
     source_event = record.payload.get("source_event")
     if not source_event:
@@ -356,6 +385,19 @@ def read_manual_review_record(record: TimelineEvent) -> ManualReviewRead | None:
 def read_case_suggestion_record(record: TimelineEvent) -> CaseSuggestionRead | None:
     stored = record.payload.get("case_suggestion_projection")
     if stored:
+        if "source_event_type" not in stored:
+            stored = {
+                **stored,
+                "source_event_type": record.event_type,
+                "decision": stored.get("decision"),
+                "decision_reason": stored.get("decision_reason"),
+                "resolved_by": stored.get("resolved_by"),
+                "resolved_at": stored.get("resolved_at"),
+                "resolution_payload": stored.get("resolution_payload", {}),
+                "resolution_event_id": stored.get("resolution_event_id"),
+                "promoted_case_id": stored.get("promoted_case_id"),
+                "promoted_at": stored.get("promoted_at"),
+            }
         return CaseSuggestionRead.model_validate(stored)
     source_event = record.payload.get("source_event")
     if not source_event:
@@ -391,18 +433,19 @@ def list_timeline(
 
 def get_timeline_by_source_event_id(session: Session, source_event_id: str) -> TimelineEventRead | None:
     settings = get_settings()
-    default_storage_id = build_storage_event_uuid(settings.default_source_component, source_event_id)
-    row = session.scalar(
-        select(TimelineEvent).where(
-            TimelineEvent.source_component == settings.default_source_component,
-            TimelineEvent.source_event_id == default_storage_id,
+    for component in (settings.default_source_component, settings.workflow_source_component):
+        storage_id = build_storage_event_uuid(component, source_event_id)
+        row = session.scalar(
+            select(TimelineEvent).where(
+                TimelineEvent.source_component == component,
+                TimelineEvent.source_event_id == storage_id,
+            )
         )
-    )
-    if row is not None:
-        return read_timeline_record(row)
+        if row is not None:
+            return read_timeline_record(row)
 
     stmt = select(TimelineEvent).order_by(TimelineEvent.occurred_at.desc())
-    for candidate in session.scalars(stmt.limit(settings.max_query_limit)).all():
+    for candidate in session.scalars(stmt).all():
         item = read_timeline_record(candidate)
         if item.source_event_id == source_event_id:
             return item
@@ -417,40 +460,21 @@ def list_manual_reviews(
     camera_id: str | None = None,
     subject_id: str | None = None,
 ) -> list[ManualReviewRead]:
-    settings = get_settings()
-    safe_limit = max(1, min(limit, settings.max_query_limit))
-    stmt = (
-        select(TimelineEvent)
-        .where(TimelineEvent.event_type.in_(sorted(MANUAL_REVIEW_EVENT_TYPES)))
-        .order_by(TimelineEvent.occurred_at.desc())
+    from app.services.manual_review_service import list_manual_reviews as _list_manual_reviews
+
+    return _list_manual_reviews(
+        session,
+        limit=limit,
+        review_type=review_type,
+        camera_id=camera_id,
+        subject_id=subject_id,
     )
-    collapsed: dict[str, ManualReviewRead] = {}
-    for row in session.scalars(stmt.limit(settings.max_query_limit)).all():
-        projection = read_manual_review_record(row)
-        if projection is None:
-            continue
-        existing = collapsed.get(projection.review_id)
-        if existing is None or projection.event_ts > existing.event_ts:
-            collapsed[projection.review_id] = projection
-    items = list(collapsed.values())
-    items.sort(key=lambda item: item.event_ts, reverse=True)
-    filtered = []
-    for item in items:
-        if review_type and item.review_type != review_type:
-            continue
-        if camera_id and item.camera_id != camera_id:
-            continue
-        if subject_id and item.subject_id != subject_id:
-            continue
-        filtered.append(item)
-    return filtered[:safe_limit]
 
 
 def get_manual_review(session: Session, review_id: str) -> ManualReviewRead | None:
-    for item in list_manual_reviews(session, limit=get_settings().max_query_limit):
-        if item.review_id == review_id:
-            return item
-    return None
+    from app.services.manual_review_service import get_manual_review as _get_manual_review
+
+    return _get_manual_review(session, review_id)
 
 
 def list_case_suggestions(
@@ -461,40 +485,21 @@ def list_case_suggestions(
     camera_id: str | None = None,
     subject_id: str | None = None,
 ) -> list[CaseSuggestionRead]:
-    settings = get_settings()
-    safe_limit = max(1, min(limit, settings.max_query_limit))
-    stmt = (
-        select(TimelineEvent)
-        .where(TimelineEvent.event_type.in_(sorted(CASE_SUGGESTION_EVENT_TYPES)))
-        .order_by(TimelineEvent.occurred_at.desc())
+    from app.services.case_suggestion_service import list_case_suggestions as _list_case_suggestions
+
+    return _list_case_suggestions(
+        session,
+        limit=limit,
+        suggestion_type=suggestion_type,
+        camera_id=camera_id,
+        subject_id=subject_id,
     )
-    collapsed: dict[str, CaseSuggestionRead] = {}
-    for row in session.scalars(stmt.limit(settings.max_query_limit)).all():
-        projection = read_case_suggestion_record(row)
-        if projection is None:
-            continue
-        existing = collapsed.get(projection.suggestion_id)
-        if existing is None or projection.event_ts > existing.event_ts:
-            collapsed[projection.suggestion_id] = projection
-    items = list(collapsed.values())
-    items.sort(key=lambda item: item.event_ts, reverse=True)
-    filtered = []
-    for item in items:
-        if suggestion_type and item.suggestion_type != suggestion_type:
-            continue
-        if camera_id and item.camera_id != camera_id:
-            continue
-        if subject_id and item.subject_id != subject_id:
-            continue
-        filtered.append(item)
-    return filtered[:safe_limit]
 
 
 def get_case_suggestion(session: Session, suggestion_id: str) -> CaseSuggestionRead | None:
-    for item in list_case_suggestions(session, limit=get_settings().max_query_limit):
-        if item.suggestion_id == suggestion_id:
-            return item
-    return None
+    from app.services.case_suggestion_service import get_case_suggestion as _get_case_suggestion
+
+    return _get_case_suggestion(session, suggestion_id)
 
 
 def _filter_timeline_items(

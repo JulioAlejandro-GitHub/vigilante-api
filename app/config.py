@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     db_schema_api: str = "api"
 
     default_source_component: str = "vigilante-recognition"
+    workflow_source_component: str = "vigilante-api"
     default_query_limit: int = 50
     max_query_limit: int = 200
 

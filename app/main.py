@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from app.config import get_settings
+from app.routes.cases import router as cases_router
 from app.routes.case_suggestions import router as case_suggestions_router
 from app.routes.health import router as health_router
 from app.routes.manual_reviews import router as manual_reviews_router
@@ -16,6 +17,7 @@ def create_app() -> FastAPI:
     app.include_router(timeline_router)
     app.include_router(manual_reviews_router)
     app.include_router(case_suggestions_router)
+    app.include_router(cases_router)
     return app
 
 

@@ -1,0 +1,10 @@
+{
+  "decision": "approved",
+  "decision_reason": "confirmed by analyst after continuity review",
+  "resolved_by": "julio",
+  "identity_resolution": "confirm_identity",
+  "confirmed_person_profile_id": "44444444-4444-4444-4444-444444444441",
+  "resolution_payload": {
+    "note": "match aligned with analyst review"
+  }
+}

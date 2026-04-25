@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, JSON, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, JSON, SmallInteger, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.config import get_settings
@@ -43,6 +43,14 @@ class Camera(Base):
     site_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
 
 
+class Zone(Base):
+    __tablename__ = "zone"
+    __table_args__ = API_TABLE_ARGS
+
+    zone_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    site_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+
+
 class PersonProfile(Base):
     __tablename__ = "person_profile"
     __table_args__ = API_TABLE_ARGS
@@ -76,3 +84,47 @@ class TimelineEvent(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     organization_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+
+
+class CaseRecord(Base):
+    __tablename__ = "case_record"
+    __table_args__ = API_TABLE_ARGS
+
+    case_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    case_code: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    case_type: Mapped[str] = mapped_column(Text, nullable=False)
+    case_status: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    severity: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    primary_camera_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    primary_observed_subject_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    primary_person_profile_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_type: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    assigned_to_user_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    case_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    organization_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    site_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    zone_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+
+
+class CaseItem(Base):
+    __tablename__ = "case_item"
+    __table_args__ = API_TABLE_ARGS
+
+    case_item_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    case_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    item_type: Mapped[str] = mapped_column(Text, nullable=False)
+    item_ref_uuid: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    item_ref_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    added_by_user_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
