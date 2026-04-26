@@ -18,7 +18,7 @@ from app.services.timeline_service import (
     list_timeline_rows,
     normalized_workflow_payload,
 )
-from app.services.workflow_exceptions import WorkflowConflictError, WorkflowNotFoundError
+from app.services.workflow_exceptions import WorkflowConflictError, WorkflowNotFoundError, WorkflowValidationError
 
 
 CASE_SUGGESTION_ACTION_EVENT_TYPES = {"case_suggestion_resolved", "case_record_created"}
@@ -29,7 +29,8 @@ FINAL_CASE_SUGGESTION_STATUSES = {"accepted", "rejected"}
 class CaseSuggestionResolutionRequest(BaseModel):
     decision: Literal["accepted", "rejected", "deferred"]
     decision_reason: str
-    resolved_by: str
+    resolved_by: str | None = None
+    resolved_by_user_id: str | None = None
     resolution_payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -138,6 +139,10 @@ def resolve_case_suggestion(
     if current.status in FINAL_CASE_SUGGESTION_STATUSES and _same_case_suggestion_resolution(current, request):
         return current
 
+    resolved_by = (request.resolved_by or "").strip()
+    if not resolved_by:
+        raise WorkflowValidationError("resolved_by is required")
+
     resolved_at = datetime.now(timezone.utc)
     action_payload = {
         "suggestion_id": current.suggestion_id,
@@ -146,7 +151,8 @@ def resolve_case_suggestion(
         "suggestion_type": current.suggestion_type,
         "decision": request.decision,
         "decision_reason": request.decision_reason,
-        "resolved_by": request.resolved_by,
+        "resolved_by": resolved_by,
+        "resolved_by_user_id": request.resolved_by_user_id,
         "resolved_at": resolved_at.isoformat(),
         "resolution_payload": dict(request.resolution_payload),
     }
@@ -155,6 +161,8 @@ def resolve_case_suggestion(
             "suggestion_id": suggestion_id,
             "action_type": "case_suggestion_resolved",
             "request": request.model_dump(mode="json"),
+            "resolved_by": resolved_by,
+            "resolved_by_user_id": request.resolved_by_user_id,
         }
     )
     _, created = create_audit_timeline_event(
@@ -195,6 +203,10 @@ def promote_case_suggestion(
     if suggestion.status != "accepted" and suggestion.promoted_case_id is None:
         raise WorkflowConflictError("Case suggestion must be accepted before promotion")
 
+    resolved_by = (request.resolved_by or "").strip()
+    if not resolved_by:
+        raise WorkflowValidationError("resolved_by is required")
+
     case_record, _ = create_case_from_suggestion(session, suggestion=suggestion, request=request)
     promoted_at = datetime.now(timezone.utc)
     action_payload = {
@@ -206,7 +218,8 @@ def promote_case_suggestion(
         "severity": case_record.severity,
         "source_suggestion_id": suggestion.suggestion_id,
         "source_event_id": suggestion.source_event_id,
-        "resolved_by": request.resolved_by,
+        "resolved_by": resolved_by,
+        "resolved_by_user_id": request.resolved_by_user_id,
         "promoted_at": promoted_at.isoformat(),
         "case_payload": case_record.case_payload,
     }

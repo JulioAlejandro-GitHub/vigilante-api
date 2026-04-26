@@ -16,12 +16,13 @@ def load_json_fixture(path: str) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def test_health_and_projection_endpoints():
+def test_health_and_projection_endpoints(auth_headers):
     with get_session() as session:
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_manual_review_required.json"))
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_case_suggestion_created.json"))
 
     client = TestClient(app)
+    client.headers.update(auth_headers())
 
     health = client.get("/health")
     assert health.status_code == 200
@@ -57,7 +58,7 @@ def test_health_and_projection_endpoints():
     assert suggestion_item.json()["suggestion_type"] == "unresolved_subject_case"
 
 
-def test_projection_endpoints_do_not_duplicate_when_related_events_collapse_to_same_review_id():
+def test_projection_endpoints_do_not_duplicate_when_related_events_collapse_to_same_review_id(auth_headers):
     with get_session() as session:
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_identity_conflict.json"))
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_manual_review_required_identity_conflict.json"))
@@ -65,6 +66,7 @@ def test_projection_endpoints_do_not_duplicate_when_related_events_collapse_to_s
         suggestions = [item.model_dump(mode="json") for item in list_case_suggestions(session, limit=50)]
 
     client = TestClient(app)
+    client.headers.update(auth_headers())
 
     response = client.get("/api/v1/manual-reviews")
     assert response.status_code == 200
@@ -78,7 +80,7 @@ def test_projection_endpoints_do_not_duplicate_when_related_events_collapse_to_s
     assert suggestion_response.json() == suggestions
 
 
-def test_http_action_endpoints_minimum_flow():
+def test_http_action_endpoints_minimum_flow(auth_headers):
     with get_session() as session:
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_manual_review_required.json"))
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_identity_conflict.json"))
@@ -90,6 +92,7 @@ def test_http_action_endpoints_minimum_flow():
         identity_review = [item for item in list_manual_reviews(session, limit=50) if item.review_type == "identity_conflict"][0]
 
     client = TestClient(app)
+    client.headers.update(auth_headers("maria"))
 
     review_response = client.post(
         f"/api/v1/manual-reviews/{manual_review_id.review_id}/resolve",

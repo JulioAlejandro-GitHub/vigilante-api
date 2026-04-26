@@ -31,7 +31,8 @@ FINAL_MANUAL_REVIEW_STATUSES = {"approved", "rejected"}
 class ManualReviewResolutionRequest(BaseModel):
     decision: Literal["approved", "rejected", "needs_more_evidence"]
     decision_reason: str
-    resolved_by: str
+    resolved_by: str | None = None
+    resolved_by_user_id: str | None = None
     identity_resolution: Literal["confirm_identity", "discard_candidate", "mark_unresolved", "escalate"] | None = None
     confirmed_person_profile_id: str | None = None
     discarded_person_profile_id: str | None = None
@@ -135,6 +136,10 @@ def resolve_manual_review(
     if current.status in FINAL_MANUAL_REVIEW_STATUSES and _same_manual_review_resolution(current, request):
         return current
 
+    resolved_by = (request.resolved_by or "").strip()
+    if not resolved_by:
+        raise WorkflowValidationError("resolved_by is required")
+
     resolved_at = datetime.now(timezone.utc)
     resolution_payload = {
         **dict(request.resolution_payload),
@@ -155,17 +160,20 @@ def resolve_manual_review(
         "review_type": current.review_type,
         "decision": request.decision,
         "decision_reason": request.decision_reason,
-        "resolved_by": request.resolved_by,
+        "resolved_by": resolved_by,
+        "resolved_by_user_id": request.resolved_by_user_id,
         "resolved_at": resolved_at.isoformat(),
         "resolution_payload": resolution_payload,
     }
     action_type = "identity_conflict_resolved" if current.review_type == "identity_conflict" else "manual_review_resolved"
     action_key = normalized_workflow_payload(
         {
-            "review_id": review_id,
-            "action_type": action_type,
-            "request": request.model_dump(mode="json"),
-        }
+        "review_id": review_id,
+        "action_type": action_type,
+        "request": request.model_dump(mode="json"),
+        "resolved_by": resolved_by,
+        "resolved_by_user_id": request.resolved_by_user_id,
+    }
     )
     summary = (
         f"Conflicto de identidad resuelto como {request.decision}"

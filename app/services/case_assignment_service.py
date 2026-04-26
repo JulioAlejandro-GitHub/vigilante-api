@@ -12,7 +12,7 @@ from app.services.case_record_service import (
     read_case_assignment,
     read_case_record,
 )
-from app.services.events import as_str
+from app.services.events import as_str, parse_uuid
 from app.services.timeline_service import create_audit_timeline_event, normalized_workflow_payload
 from app.services.workflow_exceptions import WorkflowValidationError
 
@@ -24,13 +24,16 @@ CASE_UNASSIGNED_EVENT_TYPE = "case_unassigned"
 
 class CaseAssignRequest(BaseModel):
     assigned_to: str = Field(min_length=1)
-    assigned_by: str = Field(min_length=1)
+    assigned_by: str | None = None
+    assigned_to_user_id: str | None = None
+    assigned_by_user_id: str | None = None
     assignment_reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CaseUnassignRequest(BaseModel):
-    assigned_by: str = Field(min_length=1)
+    assigned_by: str | None = None
+    assigned_by_user_id: str | None = None
     assignment_reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -38,7 +41,7 @@ class CaseUnassignRequest(BaseModel):
 def assign_case(session: Session, case_id: str, request: CaseAssignRequest) -> CaseRecordRead:
     record = get_case_record_model(session, case_id)
     assigned_to = request.assigned_to.strip()
-    assigned_by = request.assigned_by.strip()
+    assigned_by = (request.assigned_by or "").strip()
     assignment_reason = _normalize_optional_text(request.assignment_reason)
     if not assigned_to:
         raise WorkflowValidationError("assigned_to is required")
@@ -69,6 +72,8 @@ def assign_case(session: Session, case_id: str, request: CaseAssignRequest) -> C
     metadata["assignment"] = {
         "assigned_to": assigned_to,
         "assigned_by": assigned_by,
+        "assigned_to_user_id": request.assigned_to_user_id,
+        "assigned_by_user_id": request.assigned_by_user_id,
         "assigned_at": assigned_at.isoformat(),
         "assignment_reason": assignment_reason,
         "metadata": dict(request.metadata),
@@ -78,11 +83,14 @@ def assign_case(session: Session, case_id: str, request: CaseAssignRequest) -> C
         "previous_assigned_to": previous_assigned_to,
         "assigned_to": assigned_to,
         "assigned_by": assigned_by,
+        "assigned_to_user_id": request.assigned_to_user_id,
+        "assigned_by_user_id": request.assigned_by_user_id,
         "assigned_at": assigned_at.isoformat(),
         "assignment_reason": assignment_reason,
         "metadata": dict(request.metadata),
     }
     record.case_metadata = metadata
+    record.assigned_to_user_id = parse_uuid(request.assigned_to_user_id)
     record.updated_at = assigned_at
 
     action_payload = {
@@ -92,6 +100,8 @@ def assign_case(session: Session, case_id: str, request: CaseAssignRequest) -> C
         "previous_assigned_to": previous_assigned_to,
         "assigned_to": assigned_to,
         "assigned_by": assigned_by,
+        "assigned_to_user_id": request.assigned_to_user_id,
+        "assigned_by_user_id": request.assigned_by_user_id,
         "assigned_at": assigned_at.isoformat(),
         "assignment_reason": assignment_reason,
         "metadata": dict(request.metadata),
@@ -121,7 +131,7 @@ def assign_case(session: Session, case_id: str, request: CaseAssignRequest) -> C
 
 def unassign_case(session: Session, case_id: str, request: CaseUnassignRequest) -> CaseRecordRead:
     record = get_case_record_model(session, case_id)
-    assigned_by = request.assigned_by.strip()
+    assigned_by = (request.assigned_by or "").strip()
     assignment_reason = _normalize_optional_text(request.assignment_reason)
     if not assigned_by:
         raise WorkflowValidationError("assigned_by is required")
@@ -150,11 +160,14 @@ def unassign_case(session: Session, case_id: str, request: CaseUnassignRequest) 
         "previous_assigned_to": previous_assigned_to,
         "assigned_to": None,
         "assigned_by": assigned_by,
+        "assigned_to_user_id": None,
+        "assigned_by_user_id": request.assigned_by_user_id,
         "assigned_at": unassigned_at.isoformat(),
         "assignment_reason": assignment_reason,
         "metadata": dict(request.metadata),
     }
     record.case_metadata = metadata
+    record.assigned_to_user_id = None
     record.updated_at = unassigned_at
 
     action_payload = {
@@ -164,6 +177,7 @@ def unassign_case(session: Session, case_id: str, request: CaseUnassignRequest) 
         "previous_assigned_to": previous_assigned_to,
         "assigned_to": None,
         "assigned_by": assigned_by,
+        "assigned_by_user_id": request.assigned_by_user_id,
         "assigned_at": unassigned_at.isoformat(),
         "assignment_reason": assignment_reason,
         "metadata": dict(request.metadata),

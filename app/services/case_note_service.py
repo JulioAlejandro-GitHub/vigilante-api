@@ -18,7 +18,8 @@ CASE_NOTE_ADDED_EVENT_TYPE = "case_note_added"
 
 
 class CaseNoteCreateRequest(BaseModel):
-    author: str = Field(min_length=1)
+    author: str | None = None
+    author_user_id: str | None = None
     note_text: str = Field(min_length=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -43,7 +44,7 @@ def list_case_notes(session: Session, case_id: str) -> list[CaseNoteRead]:
 
 def add_case_note(session: Session, case_id: str, request: CaseNoteCreateRequest) -> CaseNoteRead:
     record = get_case_record_model(session, case_id)
-    author = request.author.strip()
+    author = (request.author or "").strip()
     note_text = request.note_text.strip()
     if not author:
         raise WorkflowValidationError("author is required")
@@ -63,6 +64,7 @@ def add_case_note(session: Session, case_id: str, request: CaseNoteCreateRequest
             "action_type": "note_added",
             "note_id": str(note_id),
             "author": author,
+            "author_user_id": request.author_user_id,
             "note_text": note_text,
             "metadata": dict(request.metadata),
         }
@@ -74,6 +76,7 @@ def add_case_note(session: Session, case_id: str, request: CaseNoteCreateRequest
         note = CaseNote(
             case_note_id=note_id,
             case_id=record.case_id,
+            author_user_id=parse_uuid(request.author_user_id),
             note_text=note_text,
             created_at=created_at,
         )
@@ -88,6 +91,7 @@ def add_case_note(session: Session, case_id: str, request: CaseNoteCreateRequest
         "case_id": str(record.case_id),
         "case_code": record.case_code,
         "author": author,
+        "author_user_id": request.author_user_id,
         "note_text": note_text,
         "created_at": created_at.isoformat(),
         "metadata": dict(request.metadata),

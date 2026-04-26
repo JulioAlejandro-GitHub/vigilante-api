@@ -115,11 +115,12 @@ def test_case_lifecycle_notes_and_case_timeline_are_idempotent():
     assert related_reviews
 
 
-def test_case_lifecycle_http_endpoints_minimum_flow():
+def test_case_lifecycle_http_endpoints_minimum_flow(auth_headers):
     with get_session() as session:
         case = create_promoted_case_from_slice2(session)
 
     client = TestClient(app)
+    client.headers.update(auth_headers("maria"))
 
     cases_response = client.get("/api/v1/cases")
     assert cases_response.status_code == 200
@@ -142,7 +143,7 @@ def test_case_lifecycle_http_endpoints_minimum_flow():
         json=load_json_fixture("tests/fixtures/case_note_add.json"),
     )
     assert note_response.status_code == 200
-    assert note_response.json()["author"] == "julio"
+    assert note_response.json()["author"] == "maria"
 
     notes_response = client.get(f"/api/v1/cases/{case.case_id}/notes")
     assert notes_response.status_code == 200

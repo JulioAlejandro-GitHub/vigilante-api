@@ -39,7 +39,8 @@ CASE_SEVERITIES = {"low", "medium", "high", "critical"}
 
 
 class PromoteCaseSuggestionRequest(BaseModel):
-    resolved_by: str
+    resolved_by: str | None = None
+    resolved_by_user_id: str | None = None
     case_type: str
     title: str
     priority: int | str = "medium"
@@ -122,9 +123,13 @@ def create_case_from_suggestion(
     db_case_type = normalize_case_type(request.case_type)
     priority_value = normalize_case_priority(request.priority)
     severity_value = normalize_case_severity(request.severity)
+    resolved_by = (request.resolved_by or "").strip()
+    if not resolved_by:
+        raise WorkflowValidationError("resolved_by is required")
     opened_at = datetime.now(timezone.utc)
     raw_zone_id = suggestion.payload.get("zone_id")
     raw_person_profile_id = suggestion.payload.get("person_profile_id")
+    resolved_by_user_uuid = parse_uuid(request.resolved_by_user_id)
 
     record = CaseRecord(
         case_id=case_id,
@@ -141,13 +146,15 @@ def create_case_from_suggestion(
         primary_person_profile_id=resolve_existing_uuid(session, PersonProfile, raw_person_profile_id),
         opened_at=opened_at,
         created_by_type="human",
+        created_by_user_id=resolved_by_user_uuid,
         case_metadata={
             "source_suggestion_id": suggestion.suggestion_id,
             "source_event_id": suggestion.source_event_id,
             "source_suggestion_type": suggestion.suggestion_type,
             "requested_case_type": request.case_type,
             "db_case_type": db_case_type,
-            "resolved_by": request.resolved_by,
+            "resolved_by": resolved_by,
+            "resolved_by_user_id": request.resolved_by_user_id,
             "source_case_suggestion_payload": suggestion.payload,
             "case_payload": dict(request.case_payload),
             "raw_primary_camera_id": suggestion.camera_id,
@@ -171,6 +178,7 @@ def create_case_from_suggestion(
             item_ref_text=f"source_suggestion_id:{suggestion.suggestion_id}",
             is_primary=False,
             note="Slice 2 source suggestion",
+            added_by_user_id=resolved_by_user_uuid,
         )
     )
     session.add(
@@ -180,6 +188,7 @@ def create_case_from_suggestion(
             item_ref_text=suggestion.source_event_id,
             is_primary=True,
             note="Source recognition event for accepted case suggestion",
+            added_by_user_id=resolved_by_user_uuid,
         )
     )
     subject_uuid = parse_uuid(suggestion.subject_id)
@@ -191,6 +200,7 @@ def create_case_from_suggestion(
                 item_ref_uuid=subject_uuid,
                 is_primary=True,
                 note="Primary observed subject from accepted case suggestion",
+                added_by_user_id=resolved_by_user_uuid,
             )
         )
 

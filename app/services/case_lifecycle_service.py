@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import CaseRecord, CaseStatusHistory, TimelineEvent
 from app.services.case_record_service import CaseRecordRead, case_lifecycle_status, get_case_record_model, read_case_record
-from app.services.events import as_str, build_projection_uuid, build_storage_event_uuid
+from app.services.events import as_str, build_projection_uuid, build_storage_event_uuid, parse_uuid
 from app.services.timeline_service import (
     build_action_source_event_id,
     create_audit_timeline_event,
@@ -48,19 +48,22 @@ class CaseStatusChangeRequest(BaseModel):
         "merged",
     ]
     reason: str = Field(min_length=1)
-    changed_by: str = Field(min_length=1)
+    changed_by: str | None = None
+    changed_by_user_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CaseCloseRequest(BaseModel):
     reason: str = Field(min_length=1)
-    changed_by: str = Field(min_length=1)
+    changed_by: str | None = None
+    changed_by_user_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CaseReopenRequest(BaseModel):
     reason: str = Field(min_length=1)
-    changed_by: str = Field(min_length=1)
+    changed_by: str | None = None
+    changed_by_user_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -74,13 +77,23 @@ def change_case_status(
         return close_case(
             session,
             case_id,
-            CaseCloseRequest(reason=request.reason, changed_by=request.changed_by, metadata=request.metadata),
+            CaseCloseRequest(
+                reason=request.reason,
+                changed_by=request.changed_by,
+                changed_by_user_id=request.changed_by_user_id,
+                metadata=request.metadata,
+            ),
         )
     if public_status == "reopened":
         return reopen_case(
             session,
             case_id,
-            CaseReopenRequest(reason=request.reason, changed_by=request.changed_by, metadata=request.metadata),
+            CaseReopenRequest(
+                reason=request.reason,
+                changed_by=request.changed_by,
+                changed_by_user_id=request.changed_by_user_id,
+                metadata=request.metadata,
+            ),
         )
     return _apply_case_lifecycle_action(
         session,
@@ -91,6 +104,7 @@ def change_case_status(
         target_db_status=db_status,
         reason=request.reason,
         changed_by=request.changed_by,
+        changed_by_user_id=request.changed_by_user_id,
         action_metadata=request.metadata,
     )
 
@@ -105,6 +119,7 @@ def close_case(session: Session, case_id: str, request: CaseCloseRequest) -> Cas
         target_db_status="resolved",
         reason=request.reason,
         changed_by=request.changed_by,
+        changed_by_user_id=request.changed_by_user_id,
         action_metadata=request.metadata,
     )
 
@@ -119,6 +134,7 @@ def reopen_case(session: Session, case_id: str, request: CaseReopenRequest) -> C
         target_db_status="open",
         reason=request.reason,
         changed_by=request.changed_by,
+        changed_by_user_id=request.changed_by_user_id,
         action_metadata=request.metadata,
     )
 
@@ -141,7 +157,8 @@ def _apply_case_lifecycle_action(
     target_public_status: str,
     target_db_status: str,
     reason: str,
-    changed_by: str,
+    changed_by: str | None,
+    changed_by_user_id: str | None,
     action_metadata: dict[str, Any],
 ) -> CaseRecordRead:
     record = get_case_record_model(session, case_id)
@@ -158,6 +175,7 @@ def _apply_case_lifecycle_action(
         target_public_status=target_public_status,
         reason=normalized_reason,
         changed_by=normalized_actor,
+        changed_by_user_id=changed_by_user_id,
         action_metadata=action_metadata,
     )
     if _action_already_recorded(session, event_type=event_type, action_key=action_key):
@@ -181,6 +199,7 @@ def _apply_case_lifecycle_action(
                 case_id=record.case_id,
                 old_status=old_db_status,
                 new_status=target_db_status,
+                changed_by_user_id=parse_uuid(changed_by_user_id),
                 reason=normalized_reason,
                 changed_at=changed_at,
             )
@@ -196,6 +215,7 @@ def _apply_case_lifecycle_action(
         "new_db_status": target_db_status,
         "reason": normalized_reason,
         "changed_by": normalized_actor,
+        "changed_by_user_id": changed_by_user_id,
         "changed_at": changed_at.isoformat(),
         "metadata": dict(action_metadata),
     }
@@ -221,6 +241,7 @@ def _apply_case_lifecycle_action(
         "new_db_status": target_db_status,
         "reason": normalized_reason,
         "changed_by": normalized_actor,
+        "changed_by_user_id": changed_by_user_id,
         "changed_at": changed_at.isoformat(),
         "status_history_id": str(status_history_id),
         "metadata": dict(action_metadata),
@@ -255,6 +276,7 @@ def _build_lifecycle_action_key(
     target_public_status: str,
     reason: str,
     changed_by: str,
+    changed_by_user_id: str | None,
     action_metadata: dict[str, Any],
 ) -> str:
     return normalized_workflow_payload(
@@ -264,6 +286,7 @@ def _build_lifecycle_action_key(
             "target_status": target_public_status,
             "reason": reason,
             "changed_by": changed_by,
+            "changed_by_user_id": changed_by_user_id,
             "metadata": action_metadata,
         }
     )

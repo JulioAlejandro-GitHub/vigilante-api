@@ -102,7 +102,7 @@ def test_case_assignment_reassignment_unassignment_and_idempotency():
     assert event_types.count("case_unassigned") == 1
 
 
-def test_case_filters_review_filters_suggestion_filters_and_dashboard_summary():
+def test_case_filters_review_filters_suggestion_filters_and_dashboard_summary(auth_headers):
     with get_session() as session:
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_manual_review_required.json"))
         first_case = create_case_from_event(session, index=21, title="Filtered Julio case", priority="medium")
@@ -139,6 +139,7 @@ def test_case_filters_review_filters_suggestion_filters_and_dashboard_summary():
     assert len(pending_suggestions) == 1
 
     client = TestClient(app)
+    client.headers.update(auth_headers())
     assert len(client.get("/api/v1/cases", params={"assigned_to": "julio"}).json()) == 1
     assert len(client.get("/api/v1/cases", params={"status": "in_review"}).json()) == 1
     assert len(client.get("/api/v1/cases", params={"limit": 1, "offset": 1, "sort_by": "opened_at"}).json()) == 1
@@ -155,7 +156,7 @@ def test_case_filters_review_filters_suggestion_filters_and_dashboard_summary():
     assert body["pending_case_suggestions"] == 1
 
 
-def test_case_detail_is_enriched_for_web_consumption():
+def test_case_detail_is_enriched_for_web_consumption(auth_headers):
     with get_session() as session:
         ingest_event(session, load_fixture_event("tests/fixtures/recognition_manual_review_required.json"))
         case = create_case_from_event(session, index=31, title="Enriched detail case")
@@ -179,6 +180,7 @@ def test_case_detail_is_enriched_for_web_consumption():
     assert "case_assigned" in {item.event_type for item in detail.timeline}
 
     client = TestClient(app)
+    client.headers.update(auth_headers())
     response = client.get(f"/api/v1/cases/{case.case_id}")
     assert response.status_code == 200
     payload = response.json()
