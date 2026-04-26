@@ -179,26 +179,94 @@ AUTH_PASSWORD_PBKDF2_ITERATIONS=260000
 
 ## Arranque local
 
-Comandos de validación pedidos:
+Comandos de instalación y validación backend:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 PYTHONPATH=. pytest
+PYTHONPATH=. python3 scripts/seed_demo_auth.py
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Seed demo opcional para la BD PostgreSQL local ya instalada:
+El seed demo es solo para desarrollo local contra la BD PostgreSQL instalada. No ejecuta DDL ni migraciones: valida que existan las tablas/columnas de `api` y `auth`, usa el hasher real PBKDF2-SHA256 del backend y hace upserts idempotentes de organizaciones, sitios, roles, usuarios y scopes demo.
+
+Se puede ejecutar repetidas veces:
 
 ```bash
-PYTHONPATH=. DEMO_AUTH_PASSWORD=demo123 python3 scripts/seed_demo_auth.py
+PYTHONPATH=. python3 scripts/seed_demo_auth.py
+PYTHONPATH=. python3 scripts/seed_demo_auth.py
 ```
 
 Usuarios demo locales:
 
 - `julio` / `demo123`: `analyst`, scope org/site demo 1.
 - `maria` / `demo123`: `supervisor`, scope org/site demo 1 y 2.
+
+El password demo por defecto es `demo123`. Para cambiarlo en un entorno local antes de sembrar:
+
+```bash
+DEMO_AUTH_PASSWORD=otra-clave PYTHONPATH=. python3 scripts/seed_demo_auth.py
+```
+
+El script se niega a correr si `APP_ENV` no es `local`, `dev`, `development`, `demo` o `test`, y también se niega a correr sobre SQLite. Está pensado para desbloquear validación local/demo, no para producción.
+
+### Validación auth local
+
+Con `uvicorn` corriendo en `127.0.0.1:8000`:
+
+```bash
+JULIO_TOKEN=$(curl -s http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"julio","password":"demo123"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+curl -s http://127.0.0.1:8000/api/v1/auth/me \
+  -H "authorization: Bearer $JULIO_TOKEN"
+
+MARIA_TOKEN=$(curl -s http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"maria","password":"demo123"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+curl -s http://127.0.0.1:8000/api/v1/auth/me \
+  -H "authorization: Bearer $MARIA_TOKEN"
+
+curl -i -s http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"julio","password":"wrong"}'
+
+curl -s http://127.0.0.1:8000/api/v1/cases \
+  -H "authorization: Bearer $JULIO_TOKEN"
+```
+
+Resultado esperado:
+
+- login de `julio` devuelve `200`, `role: analyst`, org `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1` y site `bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1`;
+- login de `maria` devuelve `200`, `role: supervisor`, orgs demo 1 y 2, y sites demo 1 y 2;
+- `/api/v1/auth/me` devuelve el usuario actual autenticado para ambos tokens;
+- credenciales erróneas devuelven `401`;
+- endpoints protegidos aceptan el bearer token válido.
+
+### Validación con vigilante-web
+
+En otra terminal:
+
+```bash
+cd ../vigilante-web
+npm install
+npm run dev
+```
+
+Abrir `http://127.0.0.1:5173/login` y autenticar con `julio / demo123` o `maria / demo123`.
+
+En desarrollo, `vigilante-web` usa el proxy de Vite para reenviar `/api/*` a `VITE_API_BASE_URL` (`http://127.0.0.1:8000` por defecto). El flujo real usado por la web es:
+
+- `POST /api/v1/auth/login`;
+- persistencia local del JWT;
+- `GET /api/v1/auth/me` para bootstrap de sesión y RBAC visual;
+- requests protegidos con `Authorization: Bearer <token>`.
 
 ## Ejemplos rápidos
 
