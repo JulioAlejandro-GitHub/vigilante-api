@@ -30,6 +30,7 @@ Tablas usadas en este slice:
 - `auth.role` y `auth.user_role`: roles reales;
 - `auth.user_organization_scope`: organizaciones permitidas y site scope opcional en `metadata.site_ids`;
 - `api.organization` y `api.site`: contexto multiempresa;
+- `api.camera`: catálogo de cámaras con configuración RTSP estructurada;
 - `api.timeline_event`: ancla persistente e idempotente del workflow;
 - `api.case_record`, `api.case_item`, `api.case_note`, `api.case_status_history`: caso canónico, notas y lifecycle.
 
@@ -151,6 +152,16 @@ Todos los endpoints bajo `/api/v1` requieren Bearer token excepto `/api/v1/auth/
 
 - `GET /api/v1/dashboard/summary`
 
+### Cameras
+
+- `GET /api/v1/cameras`
+- `GET /api/v1/cameras/{camera_id}`
+
+Estos endpoints devuelven la configuración pública de cámara y excluyen siempre
+`camera_secret`. Si metadata heredada contiene URLs RTSP con credenciales, la
+respuesta las enmascara como `rtsp://user:***@host/...`; claves heredadas como
+`camera_pass` o `camera_secret` se omiten.
+
 ## Variables de entorno
 
 Se puede usar `DB_URL` completo o `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD`.
@@ -175,7 +186,35 @@ AUTH_TOKEN_SECRET=change-me-local-dev-secret
 AUTH_TOKEN_ISSUER=vigilante-api
 AUTH_TOKEN_TTL_MINUTES=480
 AUTH_PASSWORD_PBKDF2_ITERATIONS=260000
+CAMERA_SECRET_FERNET_KEY=
 ```
+
+`CAMERA_SECRET_FERNET_KEY` debe ser la misma clave Fernet que usa
+`vigilante-ingestion` para descifrar `api.camera.camera_secret` en runtime. Para
+generar una clave local:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+## Secretos de camara
+
+`camera_secret` se cifra desde la aplicación con Fernet y se guarda con prefijo
+`fernet:v1:`. Ese prefijo distingue valores cifrados de secretos heredados en
+texto plano. La escritura por ORM cifra automáticamente valores nuevos; valores
+que ya empiezan con `fernet:v1:` se conservan.
+
+Para migrar filas existentes y retirar secretos heredados de `metadata`:
+
+```bash
+PYTHONPATH=. python3 scripts/backfill_camera_secrets.py --dry-run
+PYTHONPATH=. python3 scripts/backfill_camera_secrets.py
+```
+
+El backfill cifra `camera_secret` plano, puede promover temporalmente
+`metadata.camera_pass` o la password de `metadata.stream_url` a
+`camera_secret`, y deja `metadata.stream_url` enmascarado para que el valor real
+no quede visible en la fila.
 
 ## Arranque local
 

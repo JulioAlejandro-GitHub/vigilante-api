@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, JSON, SmallInteger, String, Text, UniqueConstraint, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, Integer, JSON, SmallInteger, String, Text, UniqueConstraint, Uuid
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.config import get_settings
 from app.db import Base
@@ -43,6 +43,24 @@ class Camera(Base):
     camera_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     external_camera_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     site_id: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    source_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    camera_hostname: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    camera_port: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    camera_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rtsp_transport: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    channel: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    subtype: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    camera_user: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    camera_secret: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    camera_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+
+    @validates("camera_secret")
+    def _encrypt_camera_secret(self, _key: str, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return value
+        from app.services.camera_secret_service import encrypt_camera_secret_if_plaintext
+
+        return encrypt_camera_secret_if_plaintext(value)
 
 
 class Zone(Base):

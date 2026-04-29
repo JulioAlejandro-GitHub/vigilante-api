@@ -16,6 +16,7 @@ os.environ["DEFAULT_QUERY_LIMIT"] = "50"
 os.environ["MAX_QUERY_LIMIT"] = "200"
 os.environ["AUTH_TOKEN_SECRET"] = "test-vigilante-api-token-secret"
 os.environ["AUTH_PASSWORD_PBKDF2_ITERATIONS"] = "1000"
+os.environ["CAMERA_SECRET_FERNET_KEY"] = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 
 from app.config import reset_settings_cache
 from app.db import Base, get_engine, get_session, reset_db_caches
