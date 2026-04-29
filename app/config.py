@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     auth_token_ttl_minutes: int = 480
     auth_password_pbkdf2_iterations: int = 260000
     camera_secret_fernet_key: str | None = None
+    media_service_base_url: str | None = None
+    media_service_public_base_url: str | None = None
+    media_service_timeout_seconds: float = 2.0
+    media_resolution_max_refs: int = 20
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

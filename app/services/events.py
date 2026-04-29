@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Camera, Organization, PersonProfile, Site, TimelineEvent
+from app.services.media_models import EvidenceMediaItem
 
 
 SUPPORTED_EVENT_TYPES = {
@@ -63,6 +64,7 @@ class TimelineEventRead(BaseModel):
     source_component: str
     organization_id: str | None = None
     site_id: str | None = None
+    evidence_media: list[EvidenceMediaItem] = Field(default_factory=list)
 
 
 class ManualReviewRead(BaseModel):
@@ -87,6 +89,7 @@ class ManualReviewRead(BaseModel):
     resolved_at: datetime | None = None
     resolution_payload: dict[str, Any] = Field(default_factory=dict)
     resolution_event_id: str | None = None
+    evidence_media: list[EvidenceMediaItem] = Field(default_factory=list)
 
 
 class CaseSuggestionRead(BaseModel):
@@ -112,6 +115,7 @@ class CaseSuggestionRead(BaseModel):
     resolution_event_id: str | None = None
     promoted_case_id: str | None = None
     promoted_at: datetime | None = None
+    evidence_media: list[EvidenceMediaItem] = Field(default_factory=list)
 
 
 class IngestionResult(BaseModel):

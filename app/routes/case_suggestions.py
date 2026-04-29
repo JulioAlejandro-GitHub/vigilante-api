@@ -14,6 +14,7 @@ from app.services.case_suggestion_service import (
     promote_case_suggestion,
     resolve_case_suggestion,
 )
+from app.services.evidence_resolution_service import EvidenceResolutionService, evidence_resolution_service_dependency
 from app.services.events import CaseSuggestionRead
 from app.services.rbac_service import require_analyst, require_sensitive_read, require_supervisor
 from app.services.scope_service import filter_items_by_scope, require_item_scope
@@ -32,6 +33,7 @@ def get_case_suggestion_queue(
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> list[CaseSuggestionRead]:
     require_sensitive_read(current_user)
     items = list_case_suggestions(
@@ -43,7 +45,7 @@ def get_case_suggestion_queue(
         camera_id=camera_id,
         subject_id=subject_id,
     )
-    return filter_items_by_scope(current_user, items)
+    return evidence_resolution.enrich_list(filter_items_by_scope(current_user, items))
 
 
 @router.get("/{suggestion_id}", response_model=CaseSuggestionRead)
@@ -51,13 +53,14 @@ def get_case_suggestion_item(
     suggestion_id: str,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseSuggestionRead:
     require_sensitive_read(current_user)
     item = get_case_suggestion(session, suggestion_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Case suggestion not found")
     require_item_scope(current_user, item)
-    return item
+    return evidence_resolution.enrich(item)
 
 
 @router.post("/{suggestion_id}/resolve", response_model=CaseSuggestionRead, status_code=status.HTTP_200_OK)
@@ -66,6 +69,7 @@ def resolve_case_suggestion_item(
     request: CaseSuggestionResolutionRequest,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseSuggestionRead:
     try:
         require_analyst(current_user)
@@ -79,7 +83,7 @@ def resolve_case_suggestion_item(
                 "resolved_by_user_id": current_user.user_id,
             }
         )
-        return resolve_case_suggestion(session, suggestion_id, auth_request)
+        return evidence_resolution.enrich(resolve_case_suggestion(session, suggestion_id, auth_request))
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WorkflowConflictError as exc:
@@ -94,6 +98,7 @@ def promote_case_suggestion_item(
     request: PromoteCaseSuggestionRequest,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseRecordRead:
     try:
         require_supervisor(current_user)
@@ -107,7 +112,7 @@ def promote_case_suggestion_item(
                 "resolved_by_user_id": current_user.user_id,
             }
         )
-        return promote_case_suggestion(session, suggestion_id, auth_request)
+        return evidence_resolution.enrich(promote_case_suggestion(session, suggestion_id, auth_request))
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WorkflowConflictError as exc:

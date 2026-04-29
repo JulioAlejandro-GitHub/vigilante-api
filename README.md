@@ -18,6 +18,7 @@ API operativa de Vigilante con timeline forense, manual reviews, case suggestion
 - endpoint de sesión actual `GET /api/v1/auth/me`;
 - RBAC mínimo para `analyst` y `supervisor`;
 - scope por organización y sitio usando `auth.user_organization_scope`;
+- enriquecimiento on-demand de evidencia contra `vigilante-media`;
 - auditoría de acciones operativas ligada al usuario autenticado real.
 
 ## Decisión de diseño sobre BD real
@@ -162,6 +163,24 @@ Estos endpoints devuelven la configuración pública de cámara y excluyen siemp
 respuesta las enmascara como `rtsp://user:***@host/...`; claves heredadas como
 `camera_pass` o `camera_secret` se omiten.
 
+## Evidencia media
+
+Si `MEDIA_SERVICE_BASE_URL` está configurado, los endpoints operativos resuelven
+on-demand referencias encontradas en `evidence_refs`, `frame_ref`, `frame_uri` y
+claves equivalentes dentro del payload. La respuesta mantiene el payload original
+y agrega `evidence_media` en timeline, manual reviews, case suggestions y casos.
+
+Cada item de `evidence_media` incluye `ref`, `resolved`, `media_id`,
+`content_type`, `content_url`, `metadata_url`, dimensiones si están disponibles,
+timestamps y metadata básica sanitizada. En este slice `content_url` apunta
+directamente a `vigilante-media`, por ejemplo
+`http://localhost:8100/api/v1/media/{media_id}/content`; no se exponen
+credenciales de MinIO/S3 ni URLs directas del bucket.
+
+Si `vigilante-media` no responde, devuelve error o no encuentra una referencia,
+el recurso principal sigue respondiendo. El item queda con `resolved=false` y un
+`error` manejable, y los `evidence_refs` originales permanecen en el payload.
+
 ## Variables de entorno
 
 Se puede usar `DB_URL` completo o `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD`.
@@ -187,6 +206,10 @@ AUTH_TOKEN_ISSUER=vigilante-api
 AUTH_TOKEN_TTL_MINUTES=480
 AUTH_PASSWORD_PBKDF2_ITERATIONS=260000
 CAMERA_SECRET_FERNET_KEY=
+MEDIA_SERVICE_BASE_URL=http://localhost:8100
+MEDIA_SERVICE_PUBLIC_BASE_URL=http://localhost:8100
+MEDIA_SERVICE_TIMEOUT_SECONDS=2
+MEDIA_RESOLUTION_MAX_REFS=20
 ```
 
 `CAMERA_SECRET_FERNET_KEY` debe ser la misma clave Fernet que usa

@@ -23,6 +23,7 @@ from app.services.case_relation_service import (
     list_case_related_suggestions,
     list_case_timeline,
 )
+from app.services.evidence_resolution_service import EvidenceResolutionService, evidence_resolution_service_dependency
 from app.services.events import CaseSuggestionRead, ManualReviewRead, TimelineEventRead
 from app.services.rbac_service import (
     require_analyst,
@@ -53,6 +54,7 @@ def get_case_list(
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> list[CaseRecordRead]:
     require_sensitive_read(current_user)
     if organization_id or site_id:
@@ -74,7 +76,8 @@ def get_case_list(
         sort_order=sort_order,  # type: ignore[arg-type]
     )
     scoped = filter_items_by_scope(current_user, items)
-    return scoped[offset : offset + min(limit, settings.max_query_limit)]
+    page = scoped[offset : offset + min(limit, settings.max_query_limit)]
+    return evidence_resolution.enrich_list(page)
 
 
 @router.get("/{case_id}", response_model=CaseDetailRead)
@@ -83,6 +86,7 @@ def get_case_item(
     recent_limit: int = Query(default=10, ge=1),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseDetailRead:
     try:
         require_sensitive_read(current_user)
@@ -91,7 +95,7 @@ def get_case_item(
         item.reviews = filter_items_by_scope(current_user, item.reviews)
         item.suggestions = filter_items_by_scope(current_user, item.suggestions)
         item.timeline = filter_items_by_scope(current_user, item.timeline)
-        return item
+        return evidence_resolution.enrich(item)
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -102,6 +106,7 @@ def assign_case_item(
     request: CaseAssignRequest,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseRecordRead:
     try:
         require_analyst(current_user)
@@ -137,7 +142,7 @@ def assign_case_item(
                 "assigned_by_user_id": current_user.user_id,
             }
         )
-        return assign_case(session, case_id, auth_request)
+        return evidence_resolution.enrich(assign_case(session, case_id, auth_request))
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WorkflowValidationError as exc:
@@ -150,6 +155,7 @@ def unassign_case_item(
     request: CaseUnassignRequest,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseRecordRead:
     try:
         require_analyst(current_user)
@@ -162,7 +168,7 @@ def unassign_case_item(
                 "assigned_by_user_id": current_user.user_id,
             }
         )
-        return unassign_case(session, case_id, auth_request)
+        return evidence_resolution.enrich(unassign_case(session, case_id, auth_request))
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WorkflowValidationError as exc:
@@ -175,6 +181,7 @@ def change_case_status_item(
     request: CaseStatusChangeRequest,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseRecordRead:
     try:
         require_analyst(current_user)
@@ -188,7 +195,7 @@ def change_case_status_item(
                 "changed_by_user_id": current_user.user_id,
             }
         )
-        return change_case_status(session, case_id, auth_request)
+        return evidence_resolution.enrich(change_case_status(session, case_id, auth_request))
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WorkflowConflictError as exc:
@@ -203,6 +210,7 @@ def close_case_item(
     request: CaseCloseRequest,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseRecordRead:
     try:
         require_supervisor(current_user)
@@ -214,7 +222,7 @@ def close_case_item(
                 "changed_by_user_id": current_user.user_id,
             }
         )
-        return close_case(session, case_id, auth_request)
+        return evidence_resolution.enrich(close_case(session, case_id, auth_request))
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WorkflowConflictError as exc:
@@ -229,6 +237,7 @@ def reopen_case_item(
     request: CaseReopenRequest,
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseRecordRead:
     try:
         require_supervisor(current_user)
@@ -240,7 +249,7 @@ def reopen_case_item(
                 "changed_by_user_id": current_user.user_id,
             }
         )
-        return reopen_case(session, case_id, auth_request)
+        return evidence_resolution.enrich(reopen_case(session, case_id, auth_request))
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except WorkflowConflictError as exc:
@@ -255,12 +264,14 @@ def get_case_timeline(
     limit: int = Query(default=get_settings().default_query_limit, ge=1),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> list[TimelineEventRead]:
     try:
         require_sensitive_read(current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case)
-        return filter_items_by_scope(current_user, list_case_timeline(session, case_id, limit=limit))
+        items = filter_items_by_scope(current_user, list_case_timeline(session, case_id, limit=limit))
+        return evidence_resolution.enrich_list(items)
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -271,12 +282,14 @@ def get_case_reviews(
     limit: int = Query(default=get_settings().default_query_limit, ge=1),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> list[ManualReviewRead]:
     try:
         require_sensitive_read(current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case)
-        return filter_items_by_scope(current_user, list_case_related_reviews(session, case_id, limit=limit))
+        items = filter_items_by_scope(current_user, list_case_related_reviews(session, case_id, limit=limit))
+        return evidence_resolution.enrich_list(items)
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -287,11 +300,13 @@ def get_case_suggestions(
     limit: int = Query(default=get_settings().default_query_limit, ge=1),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
+    evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> list[CaseSuggestionRead]:
     try:
         require_sensitive_read(current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case)
-        return filter_items_by_scope(current_user, list_case_related_suggestions(session, case_id, limit=limit))
+        items = filter_items_by_scope(current_user, list_case_related_suggestions(session, case_id, limit=limit))
+        return evidence_resolution.enrich_list(items)
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

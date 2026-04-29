@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Camera, CaseItem, CaseRecord, Organization, PersonProfile, Site, Zone
 from app.services.events import as_str, build_projection_uuid, parse_uuid, resolve_existing_uuid
+from app.services.media_models import EvidenceMediaItem
 from app.services.workflow_exceptions import WorkflowNotFoundError, WorkflowValidationError
 
 
@@ -72,6 +73,7 @@ class CaseRecordRead(BaseModel):
     organization_id: str | None = None
     site_id: str | None = None
     case_payload: dict[str, Any] = Field(default_factory=dict)
+    evidence_media: list[EvidenceMediaItem] = Field(default_factory=list)
 
 
 def build_case_id(source_suggestion_id: str) -> UUID:
