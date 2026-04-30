@@ -173,18 +173,25 @@ y agrega `evidence_media` en timeline, manual reviews, case suggestions y casos.
 Cada item de `evidence_media` incluye `ref`, `resolved`, `media_id`,
 `content_type`, `content_url`, `thumbnail_url`, metadata del thumbnail
 (`thumbnail_content_type`, `thumbnail_width`, `thumbnail_height`,
-`thumbnail_available`, `thumbnail_status`), `metadata_url`, dimensiones si están
-disponibles, timestamps y metadata básica sanitizada. `content_url` apunta al
-original servido por `vigilante-media`, por ejemplo
-`http://localhost:8100/api/v1/media/{media_id}/content`; `thumbnail_url` apunta
-al derivado liviano `.../{media_id}/thumbnail` cuando existe. No se exponen
-credenciales de MinIO/S3 ni URLs directas del bucket.
+`thumbnail_available`, `thumbnail_status`), metadata del clip derivado
+(`clip_available`, `clip_status`, `clip_url`, `clip_content_type`,
+`clip_duration_seconds`, `clip_frame_count`, `clip_fps`, `clip_width`,
+`clip_height`), `metadata_url`, dimensiones si están disponibles, timestamps y
+metadata básica sanitizada. `content_url` apunta al original servido por
+`vigilante-media`, por ejemplo
+`http://localhost:8110/api/v1/media/{media_id}/content`; `thumbnail_url` apunta
+al derivado liviano `.../{media_id}/thumbnail` cuando existe; `clip_url` apunta a
+`.../{media_id}/clip/content` cuando `vigilante-media` puede construir un MP4
+desde frames vecinos. No se exponen credenciales de MinIO/S3 ni URLs directas del
+bucket.
 
 Si `vigilante-media` no responde, devuelve error o no encuentra una referencia,
 el recurso principal sigue respondiendo. El item queda con `resolved=false` y un
 `error` manejable, y los `evidence_refs` originales permanecen en el payload.
 Si una referencia resuelve sin thumbnail, `content_url` se conserva para que la
 web pueda usarlo como fallback.
+Si una referencia resuelve sin clip, `clip_available=false` y `clip_status`
+explican el motivo sin afectar imagen, thumbnail ni respuesta principal.
 
 ## Variables de entorno
 
@@ -211,8 +218,8 @@ AUTH_TOKEN_ISSUER=vigilante-api
 AUTH_TOKEN_TTL_MINUTES=480
 AUTH_PASSWORD_PBKDF2_ITERATIONS=260000
 CAMERA_SECRET_FERNET_KEY=
-MEDIA_SERVICE_BASE_URL=http://localhost:8100
-MEDIA_SERVICE_PUBLIC_BASE_URL=http://localhost:8100
+MEDIA_SERVICE_BASE_URL=http://127.0.0.1:8110
+MEDIA_SERVICE_PUBLIC_BASE_URL=http://127.0.0.1:8110
 MEDIA_SERVICE_TIMEOUT_SECONDS=2
 MEDIA_RESOLUTION_MAX_REFS=20
 ```
@@ -254,7 +261,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 PYTHONPATH=. pytest
 PYTHONPATH=. python3 scripts/seed_demo_auth.py
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
 El seed demo es solo para desarrollo local contra la BD PostgreSQL instalada. No ejecuta DDL ni migraciones: valida que existan las tablas/columnas de `api` y `auth`, usa el hasher real PBKDF2-SHA256 del backend y hace upserts idempotentes de organizaciones, sitios, roles, usuarios y scopes demo.
@@ -281,30 +288,30 @@ El script se niega a correr si `APP_ENV` no es `local`, `dev`, `development`, `d
 
 ### Validación auth local
 
-Con `uvicorn` corriendo en `127.0.0.1:8000`:
+Con `uvicorn` corriendo en `127.0.0.1:8001`:
 
 ```bash
-JULIO_TOKEN=$(curl -s http://127.0.0.1:8000/api/v1/auth/login \
+JULIO_TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"julio","password":"demo123"}' \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
-curl -s http://127.0.0.1:8000/api/v1/auth/me \
+curl -s http://127.0.0.1:8001/api/v1/auth/me \
   -H "authorization: Bearer $JULIO_TOKEN"
 
-MARIA_TOKEN=$(curl -s http://127.0.0.1:8000/api/v1/auth/login \
+MARIA_TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"maria","password":"demo123"}' \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
-curl -s http://127.0.0.1:8000/api/v1/auth/me \
+curl -s http://127.0.0.1:8001/api/v1/auth/me \
   -H "authorization: Bearer $MARIA_TOKEN"
 
-curl -i -s http://127.0.0.1:8000/api/v1/auth/login \
+curl -i -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"julio","password":"wrong"}'
 
-curl -s http://127.0.0.1:8000/api/v1/cases \
+curl -s http://127.0.0.1:8001/api/v1/cases \
   -H "authorization: Bearer $JULIO_TOKEN"
 ```
 
@@ -328,7 +335,7 @@ npm run dev
 
 Abrir `http://127.0.0.1:5173/login` y autenticar con `julio / demo123` o `maria / demo123`.
 
-En desarrollo, `vigilante-web` usa el proxy de Vite para reenviar `/api/*` a `VITE_API_BASE_URL` (`http://127.0.0.1:8000` por defecto). El flujo real usado por la web es:
+En desarrollo, `vigilante-web` usa el proxy de Vite para reenviar `/api/*` a `VITE_API_BASE_URL` (`http://127.0.0.1:8001` por defecto). El flujo real usado por la web es:
 
 - `POST /api/v1/auth/login`;
 - persistencia local del JWT;
@@ -338,21 +345,21 @@ En desarrollo, `vigilante-web` usa el proxy de Vite para reenviar `/api/*` a `VI
 ## Ejemplos rápidos
 
 ```bash
-TOKEN=$(curl -s http://127.0.0.1:8000/api/v1/auth/login \
+TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"julio","password":"demo123"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/api/v1/auth/me -H "authorization: Bearer $TOKEN"
-curl http://127.0.0.1:8000/api/v1/manual-reviews -H "authorization: Bearer $TOKEN"
-curl http://127.0.0.1:8000/api/v1/cases -H "authorization: Bearer $TOKEN"
-curl http://127.0.0.1:8000/api/v1/dashboard/summary -H "authorization: Bearer $TOKEN"
+curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8001/api/v1/auth/me -H "authorization: Bearer $TOKEN"
+curl http://127.0.0.1:8001/api/v1/manual-reviews -H "authorization: Bearer $TOKEN"
+curl http://127.0.0.1:8001/api/v1/cases -H "authorization: Bearer $TOKEN"
+curl http://127.0.0.1:8001/api/v1/dashboard/summary -H "authorization: Bearer $TOKEN"
 ```
 
 Resolver una manual review. El backend ignora `resolved_by` del body para auditoría y usa el usuario autenticado:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/manual-reviews/<review_id>/resolve \
+curl -X POST http://127.0.0.1:8001/api/v1/manual-reviews/<review_id>/resolve \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"decision":"approved","decision_reason":"confirmed by analyst"}'
@@ -361,11 +368,11 @@ curl -X POST http://127.0.0.1:8000/api/v1/manual-reviews/<review_id>/resolve \
 Promover una suggestion requiere supervisor:
 
 ```bash
-SUPERVISOR_TOKEN=$(curl -s http://127.0.0.1:8000/api/v1/auth/login \
+SUPERVISOR_TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"maria","password":"demo123"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
-curl -X POST http://127.0.0.1:8000/api/v1/case-suggestions/<suggestion_id>/promote \
+curl -X POST http://127.0.0.1:8001/api/v1/case-suggestions/<suggestion_id>/promote \
   -H "authorization: Bearer $SUPERVISOR_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"case_type":"unresolved_subject_case","title":"Recurring unidentified subject","priority":"medium","severity":"medium"}'

@@ -28,6 +28,15 @@ class MediaAssetResponse(BaseModel):
     thumbnail_height: int | None = None
     thumbnail_available: bool = False
     thumbnail_status: str | None = None
+    clip_available: bool = False
+    clip_status: str | None = None
+    clip_url: str | None = None
+    clip_content_type: str | None = None
+    clip_duration_seconds: float | None = None
+    clip_frame_count: int | None = None
+    clip_fps: float | None = None
+    clip_width: int | None = None
+    clip_height: int | None = None
     metadata_url: str | None = None
 
 
@@ -55,6 +64,15 @@ class EvidenceMediaItem(BaseModel):
     thumbnail_height: int | None = None
     thumbnail_available: bool = False
     thumbnail_status: str | None = None
+    clip_available: bool = False
+    clip_status: str | None = None
+    clip_url: str | None = None
+    clip_content_type: str | None = None
+    clip_duration_seconds: float | None = None
+    clip_frame_count: int | None = None
+    clip_fps: float | None = None
+    clip_width: int | None = None
+    clip_height: int | None = None
     proxy_url: str | None = None
     metadata_url: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -87,6 +105,15 @@ class EvidenceMediaItem(BaseModel):
             thumbnail_height=asset.thumbnail_height,
             thumbnail_available=asset.thumbnail_available,
             thumbnail_status=asset.thumbnail_status,
+            clip_available=asset.clip_available,
+            clip_status=asset.clip_status,
+            clip_url=asset.clip_url,
+            clip_content_type=asset.clip_content_type,
+            clip_duration_seconds=asset.clip_duration_seconds,
+            clip_frame_count=asset.clip_frame_count,
+            clip_fps=asset.clip_fps,
+            clip_width=asset.clip_width,
+            clip_height=asset.clip_height,
             metadata_url=asset.metadata_url,
             metadata=metadata,
         )

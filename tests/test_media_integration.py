@@ -32,9 +32,11 @@ class FakeMediaClient:
         *,
         failures: dict[str, MediaClientError] | None = None,
         refs_without_thumbnail: set[str] | None = None,
+        refs_without_clip: set[str] | None = None,
     ) -> None:
         self.failures = failures or {}
         self.refs_without_thumbnail = refs_without_thumbnail or set()
+        self.refs_without_clip = refs_without_clip or set()
         self.calls: list[str] = []
 
     def resolve(self, ref: str) -> MediaAssetResponse:
@@ -43,6 +45,7 @@ class FakeMediaClient:
             raise self.failures[ref]
         media_id = "media_" + str(abs(hash(ref)))
         thumbnail_url = None if ref in self.refs_without_thumbnail else f"http://media.local/api/v1/media/{media_id}/thumbnail"
+        clip_url = None if ref in self.refs_without_clip else f"http://media.local/api/v1/media/{media_id}/clip/content"
         return MediaAssetResponse(
             media_id=media_id,
             media_type="frame",
@@ -62,6 +65,15 @@ class FakeMediaClient:
             thumbnail_height=240 if thumbnail_url else None,
             thumbnail_available=thumbnail_url is not None,
             thumbnail_status="available" if thumbnail_url else "unsupported",
+            clip_available=clip_url is not None,
+            clip_status="available" if clip_url else "insufficient_frames",
+            clip_url=clip_url,
+            clip_content_type="video/mp4" if clip_url else None,
+            clip_duration_seconds=1.5 if clip_url else None,
+            clip_frame_count=3 if clip_url else None,
+            clip_fps=2.0 if clip_url else None,
+            clip_width=640 if clip_url else None,
+            clip_height=480 if clip_url else None,
             metadata_url=f"http://media.local/api/v1/media/{media_id}",
         )
 
@@ -88,6 +100,15 @@ def test_media_client_resolves_reference_and_normalizes_urls() -> None:
                 "thumbnail_height": 240,
                 "thumbnail_available": True,
                 "thumbnail_status": "available",
+                "clip_available": True,
+                "clip_status": "ready",
+                "clip_url": "/api/v1/media/media_abc/clip/content",
+                "clip_content_type": "video/mp4",
+                "clip_duration_seconds": 1.5,
+                "clip_frame_count": 3,
+                "clip_fps": 2.0,
+                "clip_width": 320,
+                "clip_height": 240,
             },
         )
 
@@ -108,6 +129,10 @@ def test_media_client_resolves_reference_and_normalizes_urls() -> None:
     assert asset.thumbnail_height == 240
     assert asset.thumbnail_available is True
     assert asset.thumbnail_status == "available"
+    assert asset.clip_available is True
+    assert asset.clip_url == "http://localhost:8100/api/v1/media/media_abc/clip/content"
+    assert asset.clip_content_type == "video/mp4"
+    assert asset.clip_frame_count == 3
     assert asset.metadata_url == "http://localhost:8100/api/v1/media/media_abc"
 
 
@@ -147,6 +172,15 @@ def test_evidence_resolution_success_and_metadata_sanitization() -> None:
     assert items[0].thumbnail_width == 320
     assert items[0].thumbnail_height == 240
     assert items[0].thumbnail_available is True
+    assert items[0].clip_available is True
+    assert items[0].clip_url is not None
+    assert items[0].clip_url.endswith("/clip/content")
+    assert items[0].clip_content_type == "video/mp4"
+    assert items[0].clip_duration_seconds == 1.5
+    assert items[0].clip_frame_count == 3
+    assert items[0].clip_fps == 2.0
+    assert items[0].clip_width == 640
+    assert items[0].clip_height == 480
     assert items[0].width == 640
     assert items[0].height == 480
     assert "access_token" not in items[0].metadata
@@ -163,6 +197,22 @@ def test_evidence_resolution_keeps_content_url_when_thumbnail_is_absent() -> Non
     assert items[0].thumbnail_url is None
     assert items[0].thumbnail_available is False
     assert items[0].thumbnail_status == "unsupported"
+    assert items[0].clip_available is True
+    assert items[0].clip_url is not None
+
+
+def test_evidence_resolution_fallback_when_clip_is_absent() -> None:
+    ref = "s3://vigilante-frames/frames/cam01/frame.jpg"
+    service = EvidenceResolutionService(client=FakeMediaClient(refs_without_clip={ref}))
+
+    items = service.resolve_refs([ref])
+
+    assert items[0].resolved is True
+    assert items[0].content_url is not None
+    assert items[0].thumbnail_url is not None
+    assert items[0].clip_available is False
+    assert items[0].clip_url is None
+    assert items[0].clip_status == "insufficient_frames"
 
 
 def test_evidence_resolution_fallback_when_media_service_is_unavailable() -> None:
@@ -227,6 +277,9 @@ def test_operational_endpoints_are_enriched_with_resolved_media(auth_headers) ->
         assert case_detail["evidence_media"][0]["resolved"] is True
         assert case_detail["evidence_media"][0]["content_url"].startswith("http://media.local/api/v1/media/")
         assert case_detail["evidence_media"][0]["thumbnail_url"].startswith("http://media.local/api/v1/media/")
+        assert case_detail["evidence_media"][0]["clip_available"] is True
+        assert case_detail["evidence_media"][0]["clip_url"].startswith("http://media.local/api/v1/media/")
+        assert case_detail["evidence_media"][0]["clip_url"].endswith("/clip/content")
         assert review["payload"]["evidence_refs"] == ["tests/fixtures/images/face_manual_review.jpg"]
         assert review["evidence_media"][0]["resolved"] is True
         assert suggestion_detail["payload"]["evidence_refs"] == ["tests/fixtures/images/face_low_quality.jpg"]
