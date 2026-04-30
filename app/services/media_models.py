@@ -22,6 +22,12 @@ class MediaAssetResponse(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     source_ref: str | None = None
     content_url: str | None = None
+    thumbnail_url: str | None = None
+    thumbnail_content_type: str | None = None
+    thumbnail_width: int | None = None
+    thumbnail_height: int | None = None
+    thumbnail_available: bool = False
+    thumbnail_status: str | None = None
     metadata_url: str | None = None
 
 
@@ -43,6 +49,12 @@ class EvidenceMediaItem(BaseModel):
     checksum_sha256: str | None = None
     etag: str | None = None
     content_url: str | None = None
+    thumbnail_url: str | None = None
+    thumbnail_content_type: str | None = None
+    thumbnail_width: int | None = None
+    thumbnail_height: int | None = None
+    thumbnail_available: bool = False
+    thumbnail_status: str | None = None
     proxy_url: str | None = None
     metadata_url: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -69,6 +81,12 @@ class EvidenceMediaItem(BaseModel):
             checksum_sha256=asset.checksum_sha256,
             etag=asset.etag,
             content_url=asset.content_url,
+            thumbnail_url=asset.thumbnail_url,
+            thumbnail_content_type=asset.thumbnail_content_type,
+            thumbnail_width=asset.thumbnail_width,
+            thumbnail_height=asset.thumbnail_height,
+            thumbnail_available=asset.thumbnail_available,
+            thumbnail_status=asset.thumbnail_status,
             metadata_url=asset.metadata_url,
             metadata=metadata,
         )

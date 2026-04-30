@@ -62,6 +62,7 @@ class MediaClient:
             raise MediaClientError("invalid_media_response", "Media service returned an invalid response.") from exc
 
         asset.content_url = self._public_url(asset.content_url)
+        asset.thumbnail_url = self._public_url(asset.thumbnail_url)
         asset.metadata_url = asset.metadata_url or self._metadata_url(asset)
         return asset
 

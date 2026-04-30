@@ -171,15 +171,20 @@ claves equivalentes dentro del payload. La respuesta mantiene el payload origina
 y agrega `evidence_media` en timeline, manual reviews, case suggestions y casos.
 
 Cada item de `evidence_media` incluye `ref`, `resolved`, `media_id`,
-`content_type`, `content_url`, `metadata_url`, dimensiones si están disponibles,
-timestamps y metadata básica sanitizada. En este slice `content_url` apunta
-directamente a `vigilante-media`, por ejemplo
-`http://localhost:8100/api/v1/media/{media_id}/content`; no se exponen
+`content_type`, `content_url`, `thumbnail_url`, metadata del thumbnail
+(`thumbnail_content_type`, `thumbnail_width`, `thumbnail_height`,
+`thumbnail_available`, `thumbnail_status`), `metadata_url`, dimensiones si están
+disponibles, timestamps y metadata básica sanitizada. `content_url` apunta al
+original servido por `vigilante-media`, por ejemplo
+`http://localhost:8100/api/v1/media/{media_id}/content`; `thumbnail_url` apunta
+al derivado liviano `.../{media_id}/thumbnail` cuando existe. No se exponen
 credenciales de MinIO/S3 ni URLs directas del bucket.
 
 Si `vigilante-media` no responde, devuelve error o no encuentra una referencia,
 el recurso principal sigue respondiendo. El item queda con `resolved=false` y un
 `error` manejable, y los `evidence_refs` originales permanecen en el payload.
+Si una referencia resuelve sin thumbnail, `content_url` se conserva para que la
+web pueda usarlo como fallback.
 
 ## Variables de entorno
 
