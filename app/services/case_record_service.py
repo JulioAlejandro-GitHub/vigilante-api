@@ -11,6 +11,11 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Camera, CaseItem, CaseRecord, Organization, PersonProfile, Site, Zone
 from app.services.events import as_str, build_projection_uuid, parse_uuid, resolve_existing_uuid
+from app.services.live_first_read_service import (
+    apply_live_first_order,
+    remove_fixture_only_items_when_live,
+    timeline_has_live_evidence,
+)
 from app.services.media_models import EvidenceMediaItem
 from app.services.workflow_exceptions import WorkflowNotFoundError, WorkflowValidationError
 
@@ -212,8 +217,12 @@ def create_case_from_suggestion(
 def list_cases(session: Session, *, limit: int) -> list[CaseRecordRead]:
     settings = get_settings()
     safe_limit = max(1, min(limit, settings.max_query_limit))
-    rows = session.scalars(select(CaseRecord).order_by(CaseRecord.opened_at.desc()).limit(safe_limit)).all()
-    return [read_case_record(row) for row in rows]
+    rows = session.scalars(select(CaseRecord).order_by(CaseRecord.opened_at.desc())).all()
+    items = [read_case_record(row) for row in rows]
+    if not settings.include_fixture_projections_when_live:
+        items = remove_fixture_only_items_when_live(items, live_evidence_exists=timeline_has_live_evidence(session))
+    items = apply_live_first_order(items)
+    return items[:safe_limit]
 
 
 def get_case(session: Session, case_id: str) -> CaseRecordRead:

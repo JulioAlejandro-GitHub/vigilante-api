@@ -10,6 +10,11 @@ from app.config import get_settings
 from app.models import TimelineEvent
 from app.services.case_record_service import CaseRecordRead, PromoteCaseSuggestionRequest, create_case_from_suggestion
 from app.services.events import CASE_SUGGESTION_EVENT_TYPES, CaseSuggestionRead, read_case_suggestion_record
+from app.services.live_first_read_service import (
+    apply_live_first_order,
+    remove_fixture_only_items_when_live,
+    timeline_has_live_evidence,
+)
 from app.services.timeline_service import (
     action_confidence,
     apply_case_promotion,
@@ -111,6 +116,9 @@ def list_case_suggestions(
         if subject_id and item.subject_id != subject_id:
             continue
         filtered.append(item)
+    if not settings.include_fixture_projections_when_live:
+        filtered = remove_fixture_only_items_when_live(filtered, live_evidence_exists=timeline_has_live_evidence(session))
+    filtered = apply_live_first_order(filtered)
     return filtered[safe_offset : safe_offset + safe_limit]
 
 

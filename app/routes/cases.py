@@ -25,6 +25,7 @@ from app.services.case_relation_service import (
 )
 from app.services.evidence_resolution_service import EvidenceResolutionService, evidence_resolution_service_dependency
 from app.services.events import CaseSuggestionRead, ManualReviewRead, TimelineEventRead
+from app.services.live_event_projection_service import project_recent_live_recognition_events
 from app.services.rbac_service import (
     require_analyst,
     require_case_assignment_permission,
@@ -59,6 +60,7 @@ def get_case_list(
     require_sensitive_read(current_user)
     if organization_id or site_id:
         require_scope_access(current_user, organization_id=organization_id, site_id=site_id)
+    project_recent_live_recognition_events(session, scope_hint=current_user)
     settings = get_settings()
     items = list_cases_filtered(
         session,
@@ -90,6 +92,7 @@ def get_case_item(
 ) -> CaseDetailRead:
     try:
         require_sensitive_read(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         item = get_case_detail(session, case_id, recent_limit=recent_limit)
         require_item_scope(current_user, item)
         item.reviews = filter_items_by_scope(current_user, item.reviews)
@@ -110,6 +113,7 @@ def assign_case_item(
 ) -> CaseRecordRead:
     try:
         require_analyst(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case, operate=True)
         target_user = find_user_by_login(session, request.assigned_to)
@@ -159,6 +163,7 @@ def unassign_case_item(
 ) -> CaseRecordRead:
     try:
         require_analyst(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case, operate=True)
         require_case_unassignment_permission(current_user, previous_assigned_to=case.assigned_to)
@@ -185,6 +190,7 @@ def change_case_status_item(
 ) -> CaseRecordRead:
     try:
         require_analyst(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         if request.status in {"closed", "reopened"}:
             require_supervisor(current_user)
         case = get_case(session, case_id)
@@ -214,6 +220,7 @@ def close_case_item(
 ) -> CaseRecordRead:
     try:
         require_supervisor(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case, operate=True)
         auth_request = request.model_copy(
@@ -241,6 +248,7 @@ def reopen_case_item(
 ) -> CaseRecordRead:
     try:
         require_supervisor(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case, operate=True)
         auth_request = request.model_copy(
@@ -268,6 +276,7 @@ def get_case_timeline(
 ) -> list[TimelineEventRead]:
     try:
         require_sensitive_read(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case)
         items = filter_items_by_scope(current_user, list_case_timeline(session, case_id, limit=limit))
@@ -286,6 +295,7 @@ def get_case_reviews(
 ) -> list[ManualReviewRead]:
     try:
         require_sensitive_read(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case)
         items = filter_items_by_scope(current_user, list_case_related_reviews(session, case_id, limit=limit))
@@ -304,6 +314,7 @@ def get_case_suggestions(
 ) -> list[CaseSuggestionRead]:
     try:
         require_sensitive_read(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case)
         items = filter_items_by_scope(current_user, list_case_related_suggestions(session, case_id, limit=limit))

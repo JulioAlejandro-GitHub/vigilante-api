@@ -8,6 +8,7 @@ from app.db import session_dependency
 from app.services.current_user_service import CurrentUser, get_current_user
 from app.services.evidence_resolution_service import EvidenceResolutionService, evidence_resolution_service_dependency
 from app.services.events import TimelineEventRead, get_timeline_by_source_event_id, list_timeline
+from app.services.live_event_projection_service import project_recent_live_recognition_events
 from app.services.rbac_service import require_sensitive_read
 from app.services.scope_service import filter_items_by_scope, require_item_scope, require_scope_access
 
@@ -30,6 +31,7 @@ def get_timeline(
     require_sensitive_read(current_user)
     if organization_id or site_id:
         require_scope_access(current_user, organization_id=organization_id, site_id=site_id)
+    project_recent_live_recognition_events(session, scope_hint=current_user)
     items = list_timeline(
         session,
         limit=limit,
@@ -51,6 +53,7 @@ def get_timeline_item(
     evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> TimelineEventRead:
     require_sensitive_read(current_user)
+    project_recent_live_recognition_events(session, scope_hint=current_user)
     item = get_timeline_by_source_event_id(session, source_event_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Timeline event not found")

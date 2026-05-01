@@ -16,6 +16,7 @@ from app.services.case_suggestion_service import (
 )
 from app.services.evidence_resolution_service import EvidenceResolutionService, evidence_resolution_service_dependency
 from app.services.events import CaseSuggestionRead
+from app.services.live_event_projection_service import project_recent_live_recognition_events
 from app.services.rbac_service import require_analyst, require_sensitive_read, require_supervisor
 from app.services.scope_service import filter_items_by_scope, require_item_scope
 from app.services.workflow_exceptions import WorkflowConflictError, WorkflowNotFoundError, WorkflowValidationError
@@ -36,6 +37,7 @@ def get_case_suggestion_queue(
     evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> list[CaseSuggestionRead]:
     require_sensitive_read(current_user)
+    project_recent_live_recognition_events(session, scope_hint=current_user)
     items = list_case_suggestions(
         session,
         limit=limit,
@@ -56,6 +58,7 @@ def get_case_suggestion_item(
     evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
 ) -> CaseSuggestionRead:
     require_sensitive_read(current_user)
+    project_recent_live_recognition_events(session, scope_hint=current_user)
     item = get_case_suggestion(session, suggestion_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Case suggestion not found")
@@ -73,6 +76,7 @@ def resolve_case_suggestion_item(
 ) -> CaseSuggestionRead:
     try:
         require_analyst(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         current = get_case_suggestion(session, suggestion_id)
         if current is None:
             raise WorkflowNotFoundError("Case suggestion not found")
@@ -102,6 +106,7 @@ def promote_case_suggestion_item(
 ) -> CaseRecordRead:
     try:
         require_supervisor(current_user)
+        project_recent_live_recognition_events(session, scope_hint=current_user)
         current = get_case_suggestion(session, suggestion_id)
         if current is None:
             raise WorkflowNotFoundError("Case suggestion not found")

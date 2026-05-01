@@ -7,6 +7,7 @@ from typing import Any, Iterable, TypeVar
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.services.evidence_ref_classifier import dedupe_evidence_refs, extract_evidence_refs
 from app.services.media_client import MediaClient, MediaClientError
 from app.services.media_models import EvidenceMediaItem
 
@@ -14,24 +15,6 @@ from app.services.media_models import EvidenceMediaItem
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-
-EVIDENCE_REF_KEYS = {
-    "evidence_ref",
-    "evidence_refs",
-    "frame_ref",
-    "frame_refs",
-    "frame_uri",
-    "frame_uris",
-    "image_ref",
-    "image_refs",
-    "image_uri",
-    "image_uris",
-    "media_ref",
-    "media_refs",
-    "media_uri",
-    "media_uris",
-}
-
 
 class EvidenceResolutionService:
     def __init__(self, *, client: MediaClient | None, max_refs: int = 20) -> None:
@@ -63,7 +46,7 @@ class EvidenceResolutionService:
         return [self.enrich(item) for item in items]
 
     def resolve_refs(self, refs: Iterable[str]) -> list[EvidenceMediaItem]:
-        unique_refs = _dedupe_refs(refs)[: self.max_refs]
+        unique_refs = dedupe_evidence_refs(refs)[: self.max_refs]
         if not unique_refs:
             return []
         if self.client is None:
@@ -102,80 +85,6 @@ def evidence_resolution_service_dependency() -> EvidenceResolutionService:
         client=MediaClient.from_settings(settings),
         max_refs=settings.media_resolution_max_refs,
     )
-
-
-def extract_evidence_refs(item: BaseModel | dict[str, Any] | Any, *, max_refs: int = 20) -> list[str]:
-    refs: list[str] = []
-    roots = _evidence_roots(item)
-    for root in roots:
-        _collect_refs(root, refs, max_refs=max_refs)
-        if len(refs) >= max_refs:
-            break
-    return _dedupe_refs(refs)[:max_refs]
-
-
-def _evidence_roots(item: BaseModel | dict[str, Any] | Any) -> list[Any]:
-    if isinstance(item, BaseModel):
-        roots = []
-        for attribute in ("payload", "case_payload", "resolution_payload"):
-            if hasattr(item, attribute):
-                roots.append(getattr(item, attribute))
-        return roots
-    return [item]
-
-
-def _collect_refs(value: Any, refs: list[str], *, max_refs: int) -> None:
-    if len(refs) >= max_refs:
-        return
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            normalized_key = str(key).lower()
-            if normalized_key in EVIDENCE_REF_KEYS:
-                _append_ref_values(nested, refs, max_refs=max_refs)
-            _collect_refs(nested, refs, max_refs=max_refs)
-            if len(refs) >= max_refs:
-                return
-        return
-    if isinstance(value, list):
-        for nested in value:
-            _collect_refs(nested, refs, max_refs=max_refs)
-            if len(refs) >= max_refs:
-                return
-
-
-def _append_ref_values(value: Any, refs: list[str], *, max_refs: int) -> None:
-    if len(refs) >= max_refs:
-        return
-    if isinstance(value, str):
-        if _valid_ref(value):
-            refs.append(value)
-        return
-    if isinstance(value, dict):
-        for nested in value.values():
-            _append_ref_values(nested, refs, max_refs=max_refs)
-            if len(refs) >= max_refs:
-                return
-        return
-    if isinstance(value, list):
-        for nested in value:
-            _append_ref_values(nested, refs, max_refs=max_refs)
-            if len(refs) >= max_refs:
-                return
-
-
-def _valid_ref(value: str) -> bool:
-    return bool(value.strip()) and len(value) <= 4096 and not any(ord(char) < 32 for char in value)
-
-
-def _dedupe_refs(refs: Iterable[str]) -> list[str]:
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for ref in refs:
-        if ref in seen:
-            continue
-        seen.add(ref)
-        deduped.append(ref)
-    return deduped
 
 
 def _ref_hash(ref: str) -> str:

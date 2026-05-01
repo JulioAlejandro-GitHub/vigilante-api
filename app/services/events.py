@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Camera, Organization, PersonProfile, Site, TimelineEvent
+from app.services.live_first_read_service import apply_live_first_order
 from app.services.media_models import EvidenceMediaItem
 
 
@@ -294,6 +295,9 @@ def ingest_event(session: Session, event: RecognitionEventEnvelope) -> Ingestion
     settings = get_settings()
     source_component = (event.source.component if event.source else None) or settings.default_source_component
     storage_source_event_id = build_storage_event_uuid(source_component, event.event_id)
+    timeline_projection = build_timeline_projection(event, source_component=source_component)
+    manual_review_projection = build_manual_review_projection(event)
+    case_suggestion_projection = build_case_suggestion_projection(event)
 
     existing = session.scalar(
         select(TimelineEvent).where(
@@ -302,11 +306,16 @@ def ingest_event(session: Session, event: RecognitionEventEnvelope) -> Ingestion
         )
     )
     if existing is not None:
+        if _backfill_existing_projection_scope(
+            session,
+            existing,
+            timeline_projection=timeline_projection,
+            manual_review_projection=manual_review_projection,
+            case_suggestion_projection=case_suggestion_projection,
+        ):
+            session.commit()
+            session.refresh(existing)
         return build_ingestion_result(existing, status="duplicate")
-
-    timeline_projection = build_timeline_projection(event, source_component=source_component)
-    manual_review_projection = build_manual_review_projection(event)
-    case_suggestion_projection = build_case_suggestion_projection(event)
 
     record = TimelineEvent(
         source_component=source_component,
@@ -345,6 +354,59 @@ def ingest_event(session: Session, event: RecognitionEventEnvelope) -> Ingestion
 
     session.refresh(record)
     return build_ingestion_result(record, status="applied")
+
+
+def _backfill_existing_projection_scope(
+    session: Session,
+    record: TimelineEvent,
+    *,
+    timeline_projection: TimelineEventRead,
+    manual_review_projection: ManualReviewRead | None,
+    case_suggestion_projection: CaseSuggestionRead | None,
+) -> bool:
+    payload = dict(record.payload or {})
+    changed = False
+    changed = _backfill_projection_payload(payload, "timeline_projection", timeline_projection) or changed
+    if manual_review_projection is not None:
+        changed = _backfill_projection_payload(payload, "manual_review_projection", manual_review_projection) or changed
+    if case_suggestion_projection is not None:
+        changed = _backfill_projection_payload(payload, "case_suggestion_projection", case_suggestion_projection) or changed
+
+    if record.organization_id is None and timeline_projection.organization_id:
+        resolved = resolve_existing_uuid(session, Organization, timeline_projection.organization_id)
+        if resolved is not None:
+            record.organization_id = resolved
+            changed = True
+    if record.site_id is None and timeline_projection.site_id:
+        resolved = resolve_existing_uuid(session, Site, timeline_projection.site_id)
+        if resolved is not None:
+            record.site_id = resolved
+            changed = True
+    if record.camera_id is None and timeline_projection.camera_id:
+        resolved = resolve_existing_uuid(session, Camera, timeline_projection.camera_id)
+        if resolved is not None:
+            record.camera_id = resolved
+            changed = True
+
+    if changed:
+        record.payload = payload
+    return changed
+
+
+def _backfill_projection_payload(payload: dict[str, Any], key: str, projection: BaseModel) -> bool:
+    stored = payload.get(key)
+    if not isinstance(stored, dict):
+        return False
+    updated = dict(stored)
+    changed = False
+    for field_name in ("organization_id", "site_id", "camera_id"):
+        value = getattr(projection, field_name, None)
+        if value and not updated.get(field_name):
+            updated[field_name] = value
+            changed = True
+    if changed:
+        payload[key] = updated
+    return changed
 
 
 def build_ingestion_result(record: TimelineEvent, *, status: Literal["applied", "duplicate"]) -> IngestionResult:
@@ -434,15 +496,17 @@ def list_timeline(
     parsed_case_id = parse_uuid(case_id)
     if parsed_case_id is not None:
         stmt = stmt.where(TimelineEvent.case_id == parsed_case_id)
-    rows = list(session.scalars(stmt.limit(settings.max_query_limit)).all())
+    candidate_limit = max(settings.max_query_limit, safe_limit * 5)
+    rows = list(session.scalars(stmt.limit(candidate_limit)).all())
     items = [read_timeline_record(row) for row in rows]
-    return _filter_timeline_items(
+    filtered = _filter_timeline_items(
         items,
         camera_id=camera_id,
         subject_id=subject_id,
         organization_id=organization_id,
         site_id=site_id,
-    )[:safe_limit]
+    )
+    return apply_live_first_order(filtered)[:safe_limit]
 
 
 def get_timeline_by_source_event_id(session: Session, source_event_id: str) -> TimelineEventRead | None:

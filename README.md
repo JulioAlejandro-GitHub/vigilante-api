@@ -19,6 +19,7 @@ API operativa de Vigilante con timeline forense, manual reviews, case suggestion
 - RBAC mínimo para `analyst` y `supervisor`;
 - scope por organización y sitio usando `auth.user_organization_scope`;
 - enriquecimiento on-demand de evidencia contra `vigilante-media`;
+- proyección oportunista live-first desde eventos recientes de `vigilante-recognition`;
 - auditoría de acciones operativas ligada al usuario autenticado real.
 
 ## Decisión de diseño sobre BD real
@@ -193,6 +194,34 @@ web pueda usarlo como fallback.
 Si una referencia resuelve sin clip, `clip_available=false` y `clip_status`
 explican el motivo sin afectar imagen, thumbnail ni respuesta principal.
 
+### Lectura live-first vs fixtures
+
+En `APP_ENV=local`, antes de leer `timeline`, `case-suggestions` y `cases`, la
+API intenta proyectar eventos recientes desde `vigilante-recognition`
+(`outbox.event_outbox` y, como fallback, `recognition.recognition_event`) hacia
+`api.timeline_event`. La proyección solo incorpora eventos soportados que tengan
+evidencia viva.
+
+La heurística explícita es:
+
+- fixture/demo: refs que empiezan con `tests/fixtures/`;
+- live: refs que empiezan con `s3://` o `minio://`.
+
+Cuando existe evidencia live, los listados ordenan primero los recursos con refs
+live y relegan refs fixture. En `case-suggestions` y `cases`, los recursos
+compuestos exclusivamente por fixtures se ocultan por defecto mientras exista
+evidencia live en timeline. Si no hay evidencia live, los fixtures siguen
+apareciendo como fallback de demo/test.
+
+Se puede cambiar ese comportamiento local con:
+
+- `LIVE_EVENT_PROJECTION_ENABLED=false` para desactivar la proyección desde
+  recognition;
+- `LIVE_PROJECTION_MAX_EVENTS=200` para ajustar cuántos eventos recientes se
+  inspeccionan;
+- `INCLUDE_FIXTURE_PROJECTIONS_WHEN_LIVE=true` para mantener fixtures visibles
+  en suggestions/cases aun cuando haya evidencia live.
+
 ## Variables de entorno
 
 Se puede usar `DB_URL` completo o `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD`.
@@ -222,6 +251,15 @@ MEDIA_SERVICE_BASE_URL=http://127.0.0.1:8110
 MEDIA_SERVICE_PUBLIC_BASE_URL=http://127.0.0.1:8110
 MEDIA_SERVICE_TIMEOUT_SECONDS=2
 MEDIA_RESOLUTION_MAX_REFS=20
+LIVE_EVENT_PROJECTION_ENABLED=true
+LIVE_PROJECTION_MAX_EVENTS=200
+INCLUDE_FIXTURE_PROJECTIONS_WHEN_LIVE=false
+RECOGNITION_DB_URL=
+RECOGNITION_DB_HOST=localhost
+RECOGNITION_DB_PORT=5432
+RECOGNITION_DB_NAME=vigilante_recognition
+RECOGNITION_DB_USER=julio
+RECOGNITION_DB_PASSWORD=
 ```
 
 `CAMERA_SECRET_FERNET_KEY` debe ser la misma clave Fernet que usa

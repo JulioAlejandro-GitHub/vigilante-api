@@ -17,6 +17,11 @@ from app.services.case_relation_service import (
     list_case_timeline,
 )
 from app.services.events import CaseSuggestionRead, ManualReviewRead, TimelineEventRead, as_str
+from app.services.live_first_read_service import (
+    apply_live_first_order,
+    remove_fixture_only_items_when_live,
+    timeline_has_live_evidence,
+)
 
 
 CASE_SORT_FIELDS = {"updated_at", "opened_at", "priority"}
@@ -67,7 +72,11 @@ def list_cases_filtered(
     normalized_sort = sort_by if sort_by in CASE_SORT_FIELDS else "updated_at"
     reverse = sort_order != "asc"
     filtered.sort(key=lambda row: _case_sort_value(row, normalized_sort), reverse=reverse)
-    return [read_case_record(row) for row in filtered[safe_offset : safe_offset + safe_limit]]
+    items = [read_case_record(row) for row in filtered]
+    if not settings.include_fixture_projections_when_live:
+        items = remove_fixture_only_items_when_live(items, live_evidence_exists=timeline_has_live_evidence(session))
+    items = apply_live_first_order(items)
+    return items[safe_offset : safe_offset + safe_limit]
 
 
 def get_case_detail(session: Session, case_id: str, *, recent_limit: int) -> CaseDetailRead:
