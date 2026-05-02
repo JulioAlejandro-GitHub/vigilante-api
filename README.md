@@ -20,6 +20,8 @@ API operativa de Vigilante con timeline forense, manual reviews, case suggestion
 - scope por organización y sitio usando `auth.user_organization_scope`;
 - enriquecimiento on-demand de evidencia contra `vigilante-media`;
 - proyección oportunista live-first desde eventos recientes de `vigilante-recognition`;
+- proyección mínima de case suggestions live desde evidencia reciente cuando recognition
+  aún no emite un `case_suggestion_created` explícito;
 - auditoría de acciones operativas ligada al usuario autenticado real.
 
 ## Decisión de diseño sobre BD real
@@ -202,6 +204,32 @@ API intenta proyectar eventos recientes desde `vigilante-recognition`
 `api.timeline_event`. La proyección solo incorpora eventos soportados que tengan
 evidencia viva.
 
+Además, al leer `case-suggestions`, la API materializa suggestions live mínimas
+desde timeline si el flujo reciente ya contiene evidencia live pero no existe un
+evento `case_suggestion_created` explícito. La regla es pequeña e intencional:
+
+- `manual_review_required`, `identity_conflict`, `recurrent_unresolved_subject`,
+  `requires_human_review=true` o `requires_case_evaluation=true` disparan una
+  suggestion directa;
+- si no hay disparador directo, `LIVE_CASE_SUGGESTION_MIN_EVENTS` eventos live
+  recientes del mismo `subject_id`/`track_id` generan una suggestion;
+- como fallback operativo, el mismo umbral de eventos live recientes en una
+  misma cámara genera una suggestion agrupada por cámara;
+- la ventana reciente es `LIVE_CASE_SUGGESTION_WINDOW_MINUTES`, aplicada como
+  ventana deslizante por grupo sobre los eventos consultados desde timeline;
+- las suggestions derivadas se escriben como eventos idempotentes
+  `case_suggestion_created` con `source.component=vigilante-api` y preservan
+  `payload.evidence_refs` `s3://`/`minio://`, `source_event_ids` originales y
+  `trigger_source_event_id`.
+
+Este slice no auto-crea casos. Los `cases` reales aparecen cuando una suggestion
+live se acepta y se promueve con el flujo existente
+`POST /api/v1/case-suggestions/{suggestion_id}/resolve` y
+`POST /api/v1/case-suggestions/{suggestion_id}/promote`. Mientras exista
+evidencia live en timeline, los casos compuestos exclusivamente por fixtures se
+ocultan por defecto para que `/api/v1/cases` no quede dominado por demo
+historico.
+
 La heurística explícita es:
 
 - fixture/demo: refs que empiezan con `tests/fixtures/`;
@@ -219,6 +247,10 @@ Se puede cambiar ese comportamiento local con:
   recognition;
 - `LIVE_PROJECTION_MAX_EVENTS=200` para ajustar cuántos eventos recientes se
   inspeccionan;
+- `LIVE_CASE_SUGGESTION_PROJECTION_ENABLED=false` para desactivar las
+  suggestions derivadas desde timeline live;
+- `LIVE_CASE_SUGGESTION_MIN_EVENTS=3` para ajustar el umbral de recurrencia;
+- `LIVE_CASE_SUGGESTION_WINDOW_MINUTES=15` para ajustar la ventana reciente;
 - `INCLUDE_FIXTURE_PROJECTIONS_WHEN_LIVE=true` para mantener fixtures visibles
   en suggestions/cases aun cuando haya evidencia live.
 
@@ -253,6 +285,9 @@ MEDIA_SERVICE_TIMEOUT_SECONDS=2
 MEDIA_RESOLUTION_MAX_REFS=20
 LIVE_EVENT_PROJECTION_ENABLED=true
 LIVE_PROJECTION_MAX_EVENTS=200
+LIVE_CASE_SUGGESTION_PROJECTION_ENABLED=true
+LIVE_CASE_SUGGESTION_MIN_EVENTS=3
+LIVE_CASE_SUGGESTION_WINDOW_MINUTES=15
 INCLUDE_FIXTURE_PROJECTIONS_WHEN_LIVE=false
 RECOGNITION_DB_URL=
 RECOGNITION_DB_HOST=localhost

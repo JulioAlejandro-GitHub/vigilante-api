@@ -50,6 +50,9 @@ def list_case_suggestions(
     subject_id: str | None = None,
 ) -> list[CaseSuggestionRead]:
     settings = get_settings()
+    from app.services.live_case_suggestion_projection_service import project_live_case_suggestions_from_timeline
+
+    project_live_case_suggestions_from_timeline(session)
     safe_limit = max(1, min(limit, settings.max_query_limit))
     safe_offset = max(0, offset)
     base_rows = list_timeline_rows(

@@ -39,6 +39,9 @@ def project_recent_live_recognition_events(session: Session, *, scope_hint: Any 
             continue
         if result.status == "applied":
             projected += 1
+    from app.services.live_case_suggestion_projection_service import project_live_case_suggestions_from_timeline
+
+    projected += project_live_case_suggestions_from_timeline(session)
     return projected
 
 

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     media_resolution_max_refs: int = 20
     live_event_projection_enabled: bool = True
     live_projection_max_events: int = 200
+    live_case_suggestion_projection_enabled: bool = True
+    live_case_suggestion_min_events: int = 3
+    live_case_suggestion_window_minutes: int = 15
     include_fixture_projections_when_live: bool = False
     recognition_db_url: str | None = None
     recognition_db_host: str | None = None
