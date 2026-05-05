@@ -164,7 +164,41 @@ Todos los endpoints bajo `/api/v1` requieren Bearer token excepto `/api/v1/auth/
 Estos endpoints devuelven la configuración pública de cámara y excluyen siempre
 `camera_secret`. Si metadata heredada contiene URLs RTSP con credenciales, la
 respuesta las enmascara como `rtsp://user:***@host/...`; claves heredadas como
-`camera_pass` o `camera_secret` se omiten.
+`camera_pass`, `camera_secret`, `api_key` o `token` se omiten.
+
+La configuración operativa de recognition por cámara se guarda sin migraciones
+en `api.camera.metadata.recognition`. Estructura esperada:
+
+```json
+{
+  "recognition": {
+    "version": "ops-v1",
+    "enabled": true,
+    "face_tuning": {
+      "det_size": "320,320",
+      "detection_threshold": 0.65,
+      "max_faces": 2,
+      "face_quality_threshold": 0.6,
+      "min_face_bbox_size": 48,
+      "min_face_area_ratio": 0.01
+    },
+    "vlm_policy": {
+      "enabled": true,
+      "backend": "auto",
+      "preferred_backend": "qwen",
+      "secondary_backend": "smolvlm",
+      "enable_for_event_types": ["manual_review_required"],
+      "max_latency_seconds": 30,
+      "max_rss_mb": 8192,
+      "max_concurrent_inferences": 1,
+      "degradation_policy": "preferred_then_secondary_then_simple"
+    }
+  }
+}
+```
+
+`vigilante-ingestion` lee esa metadata directamente desde DB, la sanea y solo
+transporta los campos necesarios hacia recognition.
 
 ## Evidencia media
 

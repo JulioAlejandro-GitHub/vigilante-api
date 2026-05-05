@@ -35,6 +35,18 @@ def test_camera_endpoints_do_not_expose_secret_or_legacy_secret_metadata(auth_he
                     "camera_pass": "admin123",
                     "stream_url": "rtsp://admin:admin123@192.168.100.143:554/cam/realmonitor?channel=1&subtype=0",
                     "notes": "legacy metadata with credentials",
+                    "recognition": {
+                        "face_tuning": {
+                            "det_size": "320,320",
+                            "detection_threshold": 0.65,
+                        },
+                        "vlm_policy": {
+                            "enabled": True,
+                            "backend": "auto",
+                            "preferred_backend": "qwen",
+                            "api_key": "must-not-leak",
+                        },
+                    },
                 },
             )
         )
@@ -52,7 +64,11 @@ def test_camera_endpoints_do_not_expose_secret_or_legacy_secret_metadata(auth_he
     assert camera["camera_hostname"] == "192.168.100.143"
     assert camera["metadata"]["stream_url"] == "rtsp://admin:***@192.168.100.143:554/cam/realmonitor?channel=1&subtype=0"
     assert "camera_pass" not in camera["metadata"]
+    assert camera["metadata"]["recognition"]["face_tuning"]["det_size"] == "320,320"
+    assert camera["metadata"]["recognition"]["vlm_policy"]["backend"] == "auto"
+    assert "api_key" not in camera["metadata"]["recognition"]["vlm_policy"]
     assert "admin123" not in str(camera)
+    assert "must-not-leak" not in str(camera)
 
     detail_response = client.get(f"/api/v1/cameras/{CAMERA_ID}")
     assert detail_response.status_code == 200
