@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     recognition_db_name: str = "vigilante_recognition"
     recognition_db_user: str | None = None
     recognition_db_password: str | None = None
+    recognition_recommendations_path: str = "../vigilante-recognition/.runtime/metrics/recommendations.jsonl"
+    recognition_recommendations_max_records: int = 1000
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

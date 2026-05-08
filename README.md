@@ -161,6 +161,16 @@ Todos los endpoints bajo `/api/v1` requieren Bearer token excepto `/api/v1/auth/
 - `GET /api/v1/cameras`
 - `GET /api/v1/cameras/{camera_id}`
 
+### Camera recommendations
+
+- `GET /api/v1/camera-recommendations`
+- `GET /api/v1/camera-recommendations/{recommendation_id}`
+- `GET /api/v1/camera-recommendations/{recommendation_id}/preview`
+- `POST /api/v1/camera-recommendations/{recommendation_id}/approve`
+- `POST /api/v1/camera-recommendations/{recommendation_id}/reject`
+- `POST /api/v1/camera-recommendations/{recommendation_id}/apply`
+- `POST /api/v1/camera-recommendations/{recommendation_id}/rollback`
+
 Estos endpoints devuelven la configuración pública de cámara y excluyen siempre
 `camera_secret`. Si metadata heredada contiene URLs RTSP con credenciales, la
 respuesta las enmascara como `rtsp://user:***@host/...`; claves heredadas como
@@ -199,6 +209,47 @@ en `api.camera.metadata.recognition`. Estructura esperada:
 
 `vigilante-ingestion` lee esa metadata directamente desde DB, la sanea y solo
 transporta los campos necesarios hacia recognition.
+
+## Workflow de recomendaciones de cámara
+
+`vigilante-api` lee recomendaciones persistidas por `vigilante-recognition`
+desde `RECOGNITION_RECOMMENDATIONS_PATH` y conserva `api.camera.metadata` como
+fuente viva. Recognition solo genera registros `pending` con `auto_apply=false`;
+no existe ruta de auto-apply.
+
+El estado operativo se deriva desde eventos auditables en `api.timeline_event`:
+
+- `camera_recommendation_approved`
+- `camera_recommendation_rejected`
+- `camera_recommendation_applied`
+- `camera_recommendation_failed`
+- `camera_recommendation_rolled_back`
+
+Cada evento guarda actor, usuario, comentario opcional, snapshot de la
+recomendación, estado previo/nuevo, resultado, paths afectados, valor anterior,
+valor nuevo y hash de `metadata.recognition` antes/después cuando aplica.
+
+`preview` muestra el patch puntual antes de escribir:
+
+```json
+{
+  "metadata_path": "api.camera.metadata.recognition.face_tuning.face_quality_threshold",
+  "current_value": 0.75,
+  "suggested_value": 0.65
+}
+```
+
+`apply` exige que la recomendación esté `approved`, valida cámara, tipo,
+formato, estado y staleness simple del valor actual, y escribe solo los campos
+soportados bajo:
+
+- `api.camera.metadata.recognition.face_tuning`
+- `api.camera.metadata.recognition.vlm_policy`
+
+Si una recomendación es informativa o contiene campos sin patch seguro,
+permanece visible pero no se aplica automáticamente. `rollback` restaura los
+valores previos guardados en el evento `applied` y deja el estado
+`rolled_back`.
 
 ## Evidencia media
 
@@ -329,6 +380,8 @@ RECOGNITION_DB_PORT=5432
 RECOGNITION_DB_NAME=vigilante_recognition
 RECOGNITION_DB_USER=julio
 RECOGNITION_DB_PASSWORD=
+RECOGNITION_RECOMMENDATIONS_PATH=../vigilante-recognition/.runtime/metrics/recommendations.jsonl
+RECOGNITION_RECOMMENDATIONS_MAX_RECORDS=1000
 ```
 
 `CAMERA_SECRET_FERNET_KEY` debe ser la misma clave Fernet que usa
