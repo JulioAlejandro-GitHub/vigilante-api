@@ -81,15 +81,16 @@ def test_prepare_smoke_camera_fails_when_requested_site_is_not_visible_to_smoke_
     assert exc.value.code == "smoke_camera_permission_mismatch"
 
 
-def test_build_smoke_metadata_preserves_existing_recognition_values() -> None:
+def test_build_smoke_metadata_resets_smoke_camera_recognition_baseline() -> None:
     metadata = build_smoke_metadata(
-        {"recognition": {"face_tuning": {"face_quality_threshold": 0.62}}},
+        {"recognition": {"face_tuning": {"face_quality_threshold": 0.62}, "vlm_policy": {"backend": "auto", "preferred_backend": "qwen"}}},
         external_camera_key="smoke",
         rtsp_url="rtsp://127.0.0.1:8554/cam01",
     )
 
-    assert metadata["recognition"]["face_tuning"]["face_quality_threshold"] == 0.62
+    assert metadata["recognition"]["face_tuning"]["face_quality_threshold"] == 0.75
     assert metadata["recognition"]["vlm_policy"]["backend"] == "simple"
+    assert metadata["recognition"]["vlm_policy"]["preferred_backend"] == "simple"
     assert metadata["smoke"]["is_smoke_ready"] is True
 
 

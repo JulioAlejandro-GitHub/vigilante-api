@@ -425,25 +425,34 @@ def build_smoke_metadata(existing: dict[str, Any], *, external_camera_key: str, 
     if not isinstance(recognition, dict):
         recognition = {}
         metadata["recognition"] = recognition
-    recognition.setdefault("version", "ops-v1")
-    recognition.setdefault("enabled", True)
+    recognition["version"] = "ops-v1"
+    recognition["enabled"] = True
 
     face_tuning = recognition.setdefault("face_tuning", {})
     if not isinstance(face_tuning, dict):
         face_tuning = {}
         recognition["face_tuning"] = face_tuning
-    face_tuning.setdefault("det_size", "320,320")
-    face_tuning.setdefault("detection_threshold", 0.65)
-    face_tuning.setdefault("face_quality_threshold", 0.75)
-    face_tuning.setdefault("max_faces", 2)
+    face_tuning.update(
+        {
+            "det_size": "320,320",
+            "detection_threshold": 0.65,
+            "face_quality_threshold": 0.75,
+            "max_faces": 2,
+        }
+    )
 
     vlm_policy = recognition.setdefault("vlm_policy", {})
     if not isinstance(vlm_policy, dict):
         vlm_policy = {}
         recognition["vlm_policy"] = vlm_policy
-    vlm_policy.setdefault("enabled", True)
-    vlm_policy.setdefault("backend", "simple")
-    vlm_policy.setdefault("preferred_backend", "simple")
+    vlm_policy.update(
+        {
+            "enabled": True,
+            "backend": "simple",
+            "preferred_backend": "simple",
+            "secondary_backend": "simple",
+        }
+    )
 
     smoke = metadata.setdefault("smoke", {})
     if not isinstance(smoke, dict):
