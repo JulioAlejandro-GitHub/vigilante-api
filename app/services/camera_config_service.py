@@ -30,6 +30,9 @@ class CameraRead(BaseModel):
     camera_id: str
     external_camera_key: str | None = None
     site_id: str | None = None
+    zone_id: str | None = None
+    name: str | None = None
+    is_active: bool = True
     source_type: str | None = None
     camera_hostname: str | None = None
     camera_port: int | None = Field(default=None, ge=1, le=65535)
@@ -62,6 +65,9 @@ def camera_to_read(camera: Camera) -> CameraRead:
         camera_id=str(camera.camera_id),
         external_camera_key=camera.external_camera_key,
         site_id=str(camera.site_id) if camera.site_id else None,
+        zone_id=str(camera.zone_id) if camera.zone_id else None,
+        name=camera.name,
+        is_active=bool(camera.is_active),
         source_type=camera.source_type,
         camera_hostname=camera.camera_hostname,
         camera_port=camera.camera_port,

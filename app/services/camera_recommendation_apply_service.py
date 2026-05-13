@@ -424,12 +424,20 @@ def _set_path(metadata: dict[str, Any], path: tuple[str, ...], value: Any) -> No
 
 def _delete_path(metadata: dict[str, Any], path: tuple[str, ...]) -> None:
     current: Any = metadata
+    parents: list[tuple[dict[str, Any], str]] = []
     for key in path[:-1]:
         if not isinstance(current, dict) or key not in current:
             return
+        parents.append((current, key))
         current = current[key]
     if isinstance(current, dict):
         current.pop(path[-1], None)
+    for parent, key in reversed(parents):
+        value = parent.get(key)
+        if isinstance(value, dict) and not value:
+            parent.pop(key, None)
+            continue
+        break
 
 
 def _expected_current_value(current_value: Any, *keys: str) -> Any:

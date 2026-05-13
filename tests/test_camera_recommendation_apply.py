@@ -93,6 +93,41 @@ def test_apply_vlm_policy_recommendation_patches_only_requested_field(monkeypatc
         assert vlm_policy["qwen_max_allowed_rss_mb"] == 14336.0
 
 
+def test_rollback_prunes_metadata_parents_created_by_apply(monkeypatch, tmp_path, auth_headers) -> None:
+    _write_recommendations(
+        monkeypatch,
+        tmp_path,
+        [
+            _recommendation(
+                "rec-create-face-quality",
+                str(CAMERA_ID),
+                {"face_quality_threshold": 0.63},
+                current_value={},
+            )
+        ],
+    )
+    original_metadata = {"notes": "camera without recognition metadata"}
+    _seed_camera(original_metadata)
+
+    client = TestClient(app)
+    client.headers.update(auth_headers())
+
+    assert client.post("/api/v1/camera-recommendations/rec-create-face-quality/approve", json={}).status_code == 200
+    applied = client.post("/api/v1/camera-recommendations/rec-create-face-quality/apply", json={})
+    assert applied.status_code == 200
+
+    with get_session() as session:
+        camera = session.get(Camera, CAMERA_ID)
+        assert camera.camera_metadata["recognition"]["face_tuning"]["face_quality_threshold"] == 0.63
+
+    rolled_back = client.post("/api/v1/camera-recommendations/rec-create-face-quality/rollback", json={})
+    assert rolled_back.status_code == 200
+
+    with get_session() as session:
+        camera = session.get(Camera, CAMERA_ID)
+        assert camera.camera_metadata == original_metadata
+
+
 def test_apply_fails_safely_when_recommendation_is_stale_or_patch_invalid(monkeypatch, tmp_path, auth_headers) -> None:
     _write_recommendations(
         monkeypatch,
@@ -214,7 +249,7 @@ def _recommendation(
         "title": "Ajuste operativo",
         "reason": "Recomendacion de runtime metrics.",
         "evidence": {"sample": True},
-        "current_value": current_value or {"face_quality_threshold": 0.75},
+        "current_value": {"face_quality_threshold": 0.75} if current_value is None else current_value,
         "suggested_value": suggested_value,
         "confidence": 0.78,
         "metrics_used": ["runtime"],

@@ -207,6 +207,29 @@ en `api.camera.metadata.recognition`. Estructura esperada:
 }
 ```
 
+### Cámara local smoke-ready
+
+El stack local usa una cámara determinística para cerrar el smoke E2E de camera
+recommendations con el mismo `camera_id` en API/web e ingestion:
+
+```bash
+cd ../GIT
+./vigilante_stack.sh prepare-smoke-camera
+```
+
+El comando siembra los usuarios demo, crea o actualiza una fila `api.camera`
+con `metadata.smoke.is_smoke_ready=true`, la asigna al site visible por el
+usuario `julio`, la deja `is_active=true` y `source_type='rtsp'`, y escribe
+`.local-logs/run/smoke-camera.env`. Por default usa:
+
+- `camera_id=11111111-1111-1111-1111-111111111111`
+- `external_camera_key=smoke_rtsp_local_001`
+- `stream_url=rtsp://127.0.0.1:8554/cam01`
+
+Variables operativas: `SMOKE_CAMERA_ID`, `SMOKE_CAMERA_EXTERNAL_KEY`,
+`SMOKE_CAMERA_RTSP_URL`, `SMOKE_CAMERA_RTSP_TRANSPORT`,
+`SMOKE_CAMERA_USERNAME`, `DEMO_USER` y `DEMO_PASS`.
+
 `vigilante-ingestion` lee esa metadata directamente desde DB, la sanea y solo
 transporta los campos necesarios hacia recognition.
 
