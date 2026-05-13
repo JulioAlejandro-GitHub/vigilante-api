@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     app_name: str = "vigilante-api"
     app_env: str = "local"
     log_level: str = "INFO"
+    runtime_log_level_path: str = ".runtime/log-level"
+    runtime_log_level_poll_seconds: float = 2.0
 
     db_url: str | None = None
     db_host: str = "localhost"

@@ -378,6 +378,8 @@ DB_SCHEMA_AUTH=auth
 APP_NAME=vigilante-api
 APP_ENV=local
 LOG_LEVEL=INFO
+RUNTIME_LOG_LEVEL_PATH=.runtime/log-level
+RUNTIME_LOG_LEVEL_POLL_SECONDS=2.0
 DEFAULT_SOURCE_COMPONENT=vigilante-recognition
 WORKFLOW_SOURCE_COMPONENT=vigilante-api
 DEFAULT_QUERY_LIMIT=50
@@ -406,6 +408,26 @@ RECOGNITION_DB_PASSWORD=
 RECOGNITION_RECOMMENDATIONS_PATH=../vigilante-recognition/.runtime/metrics/recommendations.jsonl
 RECOGNITION_RECOMMENDATIONS_MAX_RECORDS=1000
 ```
+
+## Logging operativo
+
+La política de logs es:
+
+- `INFO`: una línea corta por operación principal, con `event_id` si existe o el ID primario disponible (`recommendation_id`, `camera_id`, `case_id`, `suggestion_id`, `media_id`).
+- `DEBUG`: payloads completos, referencias largas, snapshots de workflow, trazas de proyección y detalle técnico.
+- `WARNING`: anomalías recuperables.
+- `ERROR`: fallas operativas reales.
+
+El nivel se puede cambiar sin reiniciar. Como supervisor:
+
+```bash
+curl -X POST http://127.0.0.1:8001/admin/log-level \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"level":"DEBUG"}'
+```
+
+También se puede escribir `DEBUG` o `INFO` en `RUNTIME_LOG_LEVEL_PATH`.
 
 `CAMERA_SECRET_FERNET_KEY` debe ser la misma clave Fernet que usa
 `vigilante-ingestion` para descifrar `api.camera.camera_secret` en runtime. Para

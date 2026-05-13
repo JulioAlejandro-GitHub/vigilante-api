@@ -42,6 +42,8 @@ def project_recent_live_recognition_events(session: Session, *, scope_hint: Any 
     from app.services.live_case_suggestion_projection_service import project_live_case_suggestions_from_timeline
 
     projected += project_live_case_suggestions_from_timeline(session)
+    if projected:
+        logger.info("timeline_projection_completed projected=%s", projected)
     return projected
 
 
@@ -50,7 +52,7 @@ def _fetch_recent_recognition_events() -> list[RecognitionEventEnvelope]:
     try:
         payloads = _fetch_outbox_payloads(settings.recognition_database_url, settings.live_projection_max_events)
     except SQLAlchemyError as exc:
-        logger.debug("live_projection_outbox_unavailable", extra={"error": str(exc)})
+        logger.debug("live_projection_outbox_unavailable error=%s", str(exc))
         payloads = []
 
     events = [_parse_envelope(payload) for payload in payloads]
@@ -61,7 +63,7 @@ def _fetch_recent_recognition_events() -> list[RecognitionEventEnvelope]:
     try:
         return _fetch_recognition_table_events(settings.recognition_database_url, settings.live_projection_max_events)
     except SQLAlchemyError as exc:
-        logger.debug("live_projection_recognition_table_unavailable", extra={"error": str(exc)})
+        logger.debug("live_projection_recognition_table_unavailable error=%s", str(exc))
         return []
 
 
@@ -146,7 +148,7 @@ def _parse_envelope(payload: dict[str, Any]) -> RecognitionEventEnvelope | None:
     try:
         return RecognitionEventEnvelope.model_validate(payload)
     except ValidationError as exc:
-        logger.debug("live_projection_invalid_envelope", extra={"error": str(exc)})
+        logger.debug("live_projection_invalid_envelope error=%s", str(exc))
         return None
 
 

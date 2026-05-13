@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -24,6 +25,8 @@ from app.services.timeline_service import (
     normalized_workflow_payload,
 )
 from app.services.workflow_exceptions import WorkflowConflictError, WorkflowNotFoundError, WorkflowValidationError
+
+logger = logging.getLogger(__name__)
 
 
 CASE_SUGGESTION_ACTION_EVENT_TYPES = {"case_suggestion_resolved", "case_record_created"}
@@ -176,7 +179,7 @@ def resolve_case_suggestion(
             "resolved_by_user_id": request.resolved_by_user_id,
         }
     )
-    _, created = create_audit_timeline_event(
+    timeline_event, created = create_audit_timeline_event(
         session,
         event_type="case_suggestion_resolved",
         action_key=action_key,
@@ -193,6 +196,15 @@ def resolve_case_suggestion(
     )
     if created:
         session.commit()
+        logger.info(
+            "case_suggestion_resolved suggestion_id=%s event_id=%s decision=%s camera_id=%s subject_id=%s",
+            suggestion_id,
+            timeline_event.source_event_id,
+            request.decision,
+            current.camera_id or "",
+            current.subject_id or "",
+        )
+        logger.debug("case_suggestion_resolution_payload suggestion_id=%s payload=%s", suggestion_id, action_payload)
     else:
         session.rollback()
 
@@ -240,7 +252,7 @@ def promote_case_suggestion(
             "action_type": "case_record_created",
         }
     )
-    _, created = create_audit_timeline_event(
+    timeline_event, created = create_audit_timeline_event(
         session,
         event_type="case_record_created",
         action_key=action_key,
@@ -258,6 +270,15 @@ def promote_case_suggestion(
     )
     if created:
         session.commit()
+        logger.info(
+            "case_suggestion_promoted suggestion_id=%s case_id=%s event_id=%s camera_id=%s subject_id=%s",
+            suggestion.suggestion_id,
+            case_record.case_id,
+            timeline_event.source_event_id,
+            suggestion.camera_id or "",
+            suggestion.subject_id or "",
+        )
+        logger.debug("case_suggestion_promotion_payload suggestion_id=%s payload=%s", suggestion.suggestion_id, action_payload)
     else:
         session.rollback()
 

@@ -54,7 +54,7 @@ class EvidenceResolutionService:
 
         resolved_items = [self._resolve_ref(ref) for ref in unique_refs]
         if any(not item.resolved for item in resolved_items):
-            logger.info("evidence_resolution_partial", extra={"ref_count": len(unique_refs)})
+            logger.info("evidence_resolution_partial ref_count=%s", len(unique_refs))
         return resolved_items
 
     def _resolve_ref(self, ref: str) -> EvidenceMediaItem:
@@ -62,17 +62,22 @@ class EvidenceResolutionService:
         if cached is not None:
             return cached
 
-        logger.info("media_resolve_requested", extra={"ref_hash": _ref_hash(ref)})
+        ref_hash = _ref_hash(ref)
+        logger.info("media_resolve_requested ref_hash=%s", ref_hash)
+        logger.debug("media_resolve_ref ref_hash=%s ref=%s", ref_hash, ref)
         try:
             asset = self.client.resolve(ref)
         except MediaClientError as exc:
             logger.info(
+                "%s ref_hash=%s reason=%s status_code=%s",
                 "media_service_unavailable" if exc.reason == "media_service_unavailable" else "media_resolve_failed",
-                extra={"ref_hash": _ref_hash(ref), "reason": exc.reason, "status_code": exc.status_code},
+                ref_hash,
+                exc.reason,
+                exc.status_code,
             )
             item = EvidenceMediaItem.unresolved(ref=ref, error=exc.reason)
         else:
-            logger.info("media_resolve_succeeded", extra={"ref_hash": _ref_hash(ref), "media_id": asset.media_id})
+            logger.info("media_resolve_succeeded ref_hash=%s media_id=%s", ref_hash, asset.media_id)
             item = EvidenceMediaItem.from_asset(ref, asset)
 
         self._cache[ref] = item

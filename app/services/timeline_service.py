@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -19,6 +20,8 @@ from app.services.events import (
     read_timeline_record,
     resolve_existing_uuid,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -147,6 +150,15 @@ def create_audit_timeline_event(
         if existing is None:
             raise
         return read_timeline_record(existing), False
+    logger.info(
+        "timeline_projection_completed event_id=%s event_type=%s camera_id=%s subject_id=%s case_id=%s",
+        source_event_id,
+        event_type,
+        camera_id or "",
+        subject_id or "",
+        case_id or "",
+    )
+    logger.debug("timeline_projection_payload event_id=%s payload=%s", source_event_id, payload)
     return timeline_projection, True
 
 

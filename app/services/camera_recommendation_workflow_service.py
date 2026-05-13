@@ -282,7 +282,7 @@ def record_recommendation_workflow_event(
             "result": result or {},
         }
     )
-    create_audit_timeline_event(
+    timeline_event, created = create_audit_timeline_event(
         session,
         event_type=event_type,
         action_key=action_key,
@@ -291,6 +291,22 @@ def record_recommendation_workflow_event(
         payload={"camera_recommendation_workflow": payload},
         occurred_at=event_ts,
         camera_id=recommendation.camera_id,
+    )
+    logger.info(
+        "%s recommendation_id=%s camera_id=%s status_before=%s status_after=%s created=%s event_id=%s",
+        event_type,
+        recommendation.recommendation_id,
+        recommendation.camera_id,
+        status_before,
+        status_after,
+        created,
+        timeline_event.source_event_id,
+    )
+    logger.debug(
+        "camera_recommendation_workflow_payload recommendation_id=%s event_type=%s payload=%s",
+        recommendation.recommendation_id,
+        event_type,
+        payload,
     )
 
 

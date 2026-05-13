@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -31,6 +32,7 @@ from app.services.camera_recommendation_workflow_service import (
 from app.services.workflow_exceptions import WorkflowConflictError, WorkflowNotFoundError, WorkflowValidationError
 
 MISSING = object()
+logger = logging.getLogger(__name__)
 
 
 class CameraRecommendationApplyRequest(BaseModel):
@@ -138,6 +140,12 @@ def apply_recommendation(
         raise WorkflowConflictError(f"Recommendation must be approved before apply; current status is {recommendation.status}")
 
     metadata_hash_before: str | None = None
+    logger.info(
+        "camera_recommendation_apply_started recommendation_id=%s camera_id=%s type=%s",
+        recommendation.recommendation_id,
+        recommendation.camera_id,
+        recommendation.recommendation_type,
+    )
     try:
         camera = _require_camera_row(session, recommendation.camera_id)
         metadata_before = deepcopy(camera.camera_metadata or {})
@@ -181,6 +189,17 @@ def apply_recommendation(
         )
         session.commit()
         updated = get_recommendation(session, recommendation_id, source_path=source_path)
+        logger.info(
+            "camera_recommendation_applied recommendation_id=%s camera_id=%s patch_count=%s",
+            recommendation.recommendation_id,
+            recommendation.camera_id,
+            len(applied_patches),
+        )
+        logger.debug(
+            "camera_recommendation_application recommendation_id=%s application=%s",
+            recommendation.recommendation_id,
+            application,
+        )
         return CameraRecommendationApplyResult(
             recommendation=updated,
             applied=True,
@@ -189,6 +208,12 @@ def apply_recommendation(
             metadata_hash_after=metadata_hash_after,
         )
     except WorkflowValidationError as exc:
+        logger.warning(
+            "camera_recommendation_apply_failed recommendation_id=%s camera_id=%s reason=%s",
+            recommendation.recommendation_id,
+            recommendation.camera_id,
+            type(exc).__name__,
+        )
         _record_failed_apply(
             session,
             recommendation=recommendation,
@@ -214,6 +239,12 @@ def rollback_recommendation(
     if recommendation.status != RECOMMENDATION_STATUS_APPLIED:
         raise WorkflowConflictError(f"Recommendation must be applied before rollback; current status is {recommendation.status}")
 
+    logger.info(
+        "camera_recommendation_rollback_started recommendation_id=%s camera_id=%s type=%s",
+        recommendation.recommendation_id,
+        recommendation.camera_id,
+        recommendation.recommendation_type,
+    )
     applied_payload = _latest_applied_payload(session, recommendation_id)
     if applied_payload is None:
         raise WorkflowNotFoundError("Applied recommendation audit payload not found")
@@ -276,6 +307,17 @@ def rollback_recommendation(
     )
     session.commit()
     updated = get_recommendation(session, recommendation_id, source_path=source_path)
+    logger.info(
+        "camera_recommendation_rolled_back recommendation_id=%s camera_id=%s patch_count=%s",
+        recommendation.recommendation_id,
+        recommendation.camera_id,
+        len(rollback_previews),
+    )
+    logger.debug(
+        "camera_recommendation_rollback recommendation_id=%s rollback=%s",
+        recommendation.recommendation_id,
+        rollback_payload,
+    )
     return CameraRecommendationApplyResult(
         recommendation=updated,
         applied=False,
