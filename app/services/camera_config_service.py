@@ -44,8 +44,8 @@ class CameraRead(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-def list_cameras(session: Session, *, limit: int) -> list[CameraRead]:
-    rows = session.scalars(select(Camera).order_by(Camera.camera_id.asc()).limit(limit)).all()
+def list_cameras(session: Session, *, limit: int, offset: int = 0) -> list[CameraRead]:
+    rows = session.scalars(select(Camera).order_by(Camera.camera_id.asc()).offset(max(0, offset)).limit(limit)).all()
     return [camera_to_read(row) for row in rows]
 
 

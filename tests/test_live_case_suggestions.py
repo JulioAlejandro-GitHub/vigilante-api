@@ -178,7 +178,10 @@ def test_derived_live_case_suggestion_resolves_evidence_media_on_endpoint(auth_h
 
         client = TestClient(app)
         client.headers.update(auth_headers())
-        payload = client.get("/api/v1/case-suggestions").json()
+        default_payload = client.get("/api/v1/case-suggestions").json()
+        assert default_payload[0]["evidence_media"] == []
+
+        payload = client.get("/api/v1/case-suggestions", params={"include_evidence": True}).json()
 
         assert payload[0]["payload"]["evidence_refs"] == [LIVE_REF]
         assert payload[0]["evidence_media"][0]["ref"] == LIVE_REF

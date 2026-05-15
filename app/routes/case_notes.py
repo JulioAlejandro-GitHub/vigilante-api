@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db import session_dependency
@@ -17,6 +17,8 @@ router = APIRouter(prefix="/api/v1/cases", tags=["case-notes"])
 @router.get("/{case_id}/notes", response_model=list[CaseNoteRead])
 def get_case_notes(
     case_id: str,
+    limit: int = Query(default=25, ge=1),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[CaseNoteRead]:
@@ -24,7 +26,8 @@ def get_case_notes(
         require_sensitive_read(current_user)
         case = get_case(session, case_id)
         require_item_scope(current_user, case)
-        return list_case_notes(session, case_id)
+        safe_offset = max(0, offset)
+        return list_case_notes(session, case_id)[safe_offset : safe_offset + limit]
     except WorkflowNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

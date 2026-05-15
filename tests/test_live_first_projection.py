@@ -147,7 +147,10 @@ def test_evidence_media_resolves_live_refs_on_timeline_endpoint(auth_headers) ->
 
         client = TestClient(app)
         client.headers.update(auth_headers())
-        payload = client.get("/api/v1/timeline").json()
+        default_payload = client.get("/api/v1/timeline").json()
+        assert default_payload[0]["evidence_media"] == []
+
+        payload = client.get("/api/v1/timeline", params={"include_evidence": True}).json()
 
         assert payload[0]["source_event_id"] == "evt_live_face_media_001"
         assert payload[0]["payload"]["evidence_refs"] == [LIVE_REF]

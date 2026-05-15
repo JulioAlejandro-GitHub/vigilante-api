@@ -55,10 +55,12 @@ def test_media_resolution_info_is_compact_and_debug_keeps_reference(caplog) -> N
         service.resolve_refs([ref])
 
     info_text = "\n".join(record.getMessage() for record in caplog.records if record.levelno == logging.INFO)
-    assert "media_resolve_requested ref_hash=" in info_text
-    assert "media_resolve_succeeded ref_hash=" in info_text
-    assert "media_id=media_123" in info_text
+    assert "media_resolve_requested ref_hash=" not in info_text
+    assert "media_resolve_succeeded ref_hash=" not in info_text
+    assert "media_id=media_123" not in info_text
     assert ref not in info_text
+    assert service.stats.requested == 1
+    assert service.stats.resolved == 1
 
     caplog.clear()
     service = EvidenceResolutionService(client=_FakeMediaClient())
@@ -66,4 +68,7 @@ def test_media_resolution_info_is_compact_and_debug_keeps_reference(caplog) -> N
         service.resolve_refs([ref])
 
     debug_text = "\n".join(record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG)
+    assert "media_resolve_requested ref_hash=" in debug_text
+    assert "media_resolve_succeeded ref_hash=" in debug_text
+    assert "media_id=media_123" in debug_text
     assert ref in debug_text

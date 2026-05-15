@@ -123,6 +123,14 @@ class EvidenceMediaItem(BaseModel):
         return cls(ref=ref, resolved=False, error=error)
 
 
+class EvidenceMediaPage(BaseModel):
+    items: list[EvidenceMediaItem] = Field(default_factory=list)
+    limit: int
+    offset: int
+    next_offset: int | None = None
+    total_refs: int
+
+
 SECRET_METADATA_MARKERS = (
     "secret",
     "password",

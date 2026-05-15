@@ -37,23 +37,25 @@ class CaseRelationRefs:
         return self.subject_ids | self.track_ids | self.camera_ids | self.person_profile_ids
 
 
-def list_case_related_reviews(session: Session, case_id: str, *, limit: int) -> list[ManualReviewRead]:
+def list_case_related_reviews(session: Session, case_id: str, *, limit: int, offset: int = 0) -> list[ManualReviewRead]:
     record = get_case_record_model(session, case_id)
     refs = collect_case_relation_refs(session, record)
     reviews = list_manual_reviews(session, limit=get_settings().max_query_limit)
     related = [review for review in reviews if _manual_review_related_to_case(review, refs)]
-    return related[:_safe_limit(limit)]
+    safe_offset = max(0, offset)
+    return related[safe_offset : safe_offset + _safe_limit(limit)]
 
 
-def list_case_related_suggestions(session: Session, case_id: str, *, limit: int) -> list[CaseSuggestionRead]:
+def list_case_related_suggestions(session: Session, case_id: str, *, limit: int, offset: int = 0) -> list[CaseSuggestionRead]:
     record = get_case_record_model(session, case_id)
     refs = collect_case_relation_refs(session, record)
     suggestions = list_case_suggestions(session, limit=get_settings().max_query_limit)
     related = [suggestion for suggestion in suggestions if _case_suggestion_related_to_case(suggestion, str(record.case_id), refs)]
-    return related[:_safe_limit(limit)]
+    safe_offset = max(0, offset)
+    return related[safe_offset : safe_offset + _safe_limit(limit)]
 
 
-def list_case_timeline(session: Session, case_id: str, *, limit: int) -> list[TimelineEventRead]:
+def list_case_timeline(session: Session, case_id: str, *, limit: int, offset: int = 0) -> list[TimelineEventRead]:
     record = get_case_record_model(session, case_id)
     refs = collect_case_relation_refs(session, record)
     related_reviews = list_case_related_reviews(session, str(record.case_id), limit=get_settings().max_query_limit)
@@ -86,7 +88,8 @@ def list_case_timeline(session: Session, case_id: str, *, limit: int) -> list[Ti
             continue
         seen.add(dedupe_key)
         items.append(projection)
-    return items[:_safe_limit(limit)]
+    safe_offset = max(0, offset)
+    return items[safe_offset : safe_offset + _safe_limit(limit)]
 
 
 def collect_case_relation_refs(session: Session, record: CaseRecord) -> CaseRelationRefs:

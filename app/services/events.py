@@ -481,6 +481,7 @@ def list_timeline(
     session: Session,
     *,
     limit: int,
+    offset: int = 0,
     event_type: str | None = None,
     camera_id: str | None = None,
     subject_id: str | None = None,
@@ -490,13 +491,26 @@ def list_timeline(
 ) -> list[TimelineEventRead]:
     settings = get_settings()
     safe_limit = max(1, min(limit, settings.max_query_limit))
+    safe_offset = max(0, offset)
     stmt = select(TimelineEvent).order_by(TimelineEvent.occurred_at.desc())
     if event_type:
         stmt = stmt.where(TimelineEvent.event_type == event_type)
+    parsed_camera_id = parse_uuid(camera_id)
+    if parsed_camera_id is not None:
+        stmt = stmt.where(TimelineEvent.camera_id == parsed_camera_id)
+    parsed_subject_id = parse_uuid(subject_id)
+    if parsed_subject_id is not None:
+        stmt = stmt.where(TimelineEvent.observed_subject_id == parsed_subject_id)
+    parsed_organization_id = parse_uuid(organization_id)
+    if parsed_organization_id is not None:
+        stmt = stmt.where(TimelineEvent.organization_id == parsed_organization_id)
+    parsed_site_id = parse_uuid(site_id)
+    if parsed_site_id is not None:
+        stmt = stmt.where(TimelineEvent.site_id == parsed_site_id)
     parsed_case_id = parse_uuid(case_id)
     if parsed_case_id is not None:
         stmt = stmt.where(TimelineEvent.case_id == parsed_case_id)
-    candidate_limit = max(settings.max_query_limit, safe_limit * 5)
+    candidate_limit = min(settings.max_query_limit, max(safe_limit, safe_offset + safe_limit))
     rows = list(session.scalars(stmt.limit(candidate_limit)).all())
     items = [read_timeline_record(row) for row in rows]
     filtered = _filter_timeline_items(
@@ -506,7 +520,8 @@ def list_timeline(
         organization_id=organization_id,
         site_id=site_id,
     )
-    return apply_live_first_order(filtered)[:safe_limit]
+    ordered = apply_live_first_order(filtered)
+    return ordered[safe_offset : safe_offset + safe_limit]
 
 
 def get_timeline_by_source_event_id(session: Session, source_event_id: str) -> TimelineEventRead | None:

@@ -15,13 +15,14 @@ router = APIRouter(prefix="/api/v1/cameras", tags=["cameras"])
 
 @router.get("", response_model=list[CameraRead])
 def get_camera_list(
-    limit: int = Query(default=get_settings().default_query_limit, ge=1),
+    limit: int = Query(default=12, ge=1),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[CameraRead]:
     require_sensitive_read(current_user)
     settings = get_settings()
-    return filter_items_by_scope(current_user, list_cameras(session, limit=min(limit, settings.max_query_limit)))
+    return filter_items_by_scope(current_user, list_cameras(session, limit=min(limit, settings.max_query_limit), offset=offset))
 
 
 @router.get("/{camera_id}", response_model=CameraRead)

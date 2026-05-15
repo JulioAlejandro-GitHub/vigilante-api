@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from dataclasses import dataclass
 from typing import Any, Iterable, TypeVar
 
 from pydantic import BaseModel
@@ -16,11 +17,22 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+
+@dataclass
+class EvidenceResolutionStats:
+    ref_count: int = 0
+    requested: int = 0
+    cache_hits: int = 0
+    resolved: int = 0
+    failed: int = 0
+
+
 class EvidenceResolutionService:
     def __init__(self, *, client: MediaClient | None, max_refs: int = 20) -> None:
         self.client = client
         self.max_refs = max(1, max_refs)
         self._cache: dict[str, EvidenceMediaItem] = {}
+        self.stats = EvidenceResolutionStats()
 
     def enrich(self, item: T) -> T:
         if isinstance(item, list):
@@ -52,23 +64,27 @@ class EvidenceResolutionService:
         if self.client is None:
             return []
 
+        self.stats.ref_count += len(unique_refs)
         resolved_items = [self._resolve_ref(ref) for ref in unique_refs]
         if any(not item.resolved for item in resolved_items):
-            logger.info("evidence_resolution_partial ref_count=%s", len(unique_refs))
+            logger.debug("evidence_resolution_partial ref_count=%s", len(unique_refs))
         return resolved_items
 
     def _resolve_ref(self, ref: str) -> EvidenceMediaItem:
         cached = self._cache.get(ref)
         if cached is not None:
+            self.stats.cache_hits += 1
             return cached
 
         ref_hash = _ref_hash(ref)
-        logger.info("media_resolve_requested ref_hash=%s", ref_hash)
+        self.stats.requested += 1
+        logger.debug("media_resolve_requested ref_hash=%s", ref_hash)
         logger.debug("media_resolve_ref ref_hash=%s ref=%s", ref_hash, ref)
         try:
             asset = self.client.resolve(ref)
         except MediaClientError as exc:
-            logger.info(
+            self.stats.failed += 1
+            logger.debug(
                 "%s ref_hash=%s reason=%s status_code=%s",
                 "media_service_unavailable" if exc.reason == "media_service_unavailable" else "media_resolve_failed",
                 ref_hash,
@@ -77,7 +93,8 @@ class EvidenceResolutionService:
             )
             item = EvidenceMediaItem.unresolved(ref=ref, error=exc.reason)
         else:
-            logger.info("media_resolve_succeeded ref_hash=%s media_id=%s", ref_hash, asset.media_id)
+            self.stats.resolved += 1
+            logger.debug("media_resolve_succeeded ref_hash=%s media_id=%s", ref_hash, asset.media_id)
             item = EvidenceMediaItem.from_asset(ref, asset)
 
         self._cache[ref] = item

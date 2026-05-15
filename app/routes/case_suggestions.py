@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,7 @@ from app.services.scope_service import filter_items_by_scope, require_item_scope
 from app.services.workflow_exceptions import WorkflowConflictError, WorkflowNotFoundError, WorkflowValidationError
 
 router = APIRouter(prefix="/api/v1/case-suggestions", tags=["case-suggestions"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[CaseSuggestionRead])
@@ -30,8 +33,9 @@ def get_case_suggestion_queue(
     suggestion_type: str | None = None,
     camera_id: str | None = None,
     subject_id: str | None = None,
-    limit: int = Query(default=get_settings().default_query_limit, ge=1),
+    limit: int = Query(default=25, ge=1),
     offset: int = Query(default=0, ge=0),
+    include_evidence: bool = Query(default=False),
     session: Session = Depends(session_dependency),
     current_user: CurrentUser = Depends(get_current_user),
     evidence_resolution: EvidenceResolutionService = Depends(evidence_resolution_service_dependency),
@@ -47,7 +51,21 @@ def get_case_suggestion_queue(
         camera_id=camera_id,
         subject_id=subject_id,
     )
-    return evidence_resolution.enrich_list(filter_items_by_scope(current_user, items))
+    scoped = filter_items_by_scope(current_user, items)
+    if include_evidence:
+        scoped = evidence_resolution.enrich_list(scoped)
+    logger.info(
+        "case_suggestions_loaded items=%s limit=%s offset=%s include_evidence=%s media_requested=%s media_resolved=%s media_failed=%s next_offset=%s",
+        len(scoped),
+        limit,
+        offset,
+        include_evidence,
+        evidence_resolution.stats.requested,
+        evidence_resolution.stats.resolved,
+        evidence_resolution.stats.failed,
+        offset + len(scoped) if len(scoped) >= limit else None,
+    )
+    return scoped
 
 
 @router.get("/{suggestion_id}", response_model=CaseSuggestionRead)
