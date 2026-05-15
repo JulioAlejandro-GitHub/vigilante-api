@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from app.db import get_session
-from app.ingestion.fixtures import load_fixture_event
+from tests.helpers.fixtures import load_fixture_event
 from app.services.case_record_service import PromoteCaseSuggestionRequest, list_cases
 from app.services.case_suggestion_service import (
     CaseSuggestionResolutionRequest,

@@ -5,7 +5,7 @@
 --   psql -U julio -d vigilante_api -f add_auth_user_from_template_actual_schema.sql
 --
 -- Idea:
---   - toma un usuario template que YA pueda loguear (por ejemplo julio o maria)
+--   - toma un usuario template que YA pueda loguear
 --   - clona su password_hash
 --   - clona sus roles en auth.user_role
 --   - clona su scope en auth.user_organization_scope
@@ -13,7 +13,8 @@
 --
 -- Resultado:
 --   el nuevo usuario podrá iniciar sesión con la MISMA contraseña del template
---   (por ejemplo demo123 si el template es un usuario demo sembrado).
+--   La contraseña efectiva será la misma del template hasta que se cambie por
+--   el flujo operativo correspondiente.
 --
 -- Parámetros a editar dentro del bloque DO:
 --   v_new_user_id
@@ -23,8 +24,7 @@
 --   v_template_username
 --
 -- Opcional:
---   si quieres copiar desde un supervisor, usa v_template_username := 'maria'
---   si quieres copiar desde un analyst, usa v_template_username := 'julio'
+--   usa un template con el rol y scope que quieres copiar inicialmente.
 
 BEGIN;
 
@@ -39,7 +39,7 @@ DECLARE
     v_new_username      text := 'nuevo_analista';
     v_new_email         text := 'nuevo_analista@local.test';
     v_new_display_name  text := 'Nuevo Analista';
-    v_template_username text := 'julio';
+    v_template_username text := '<usuario_template_existente>';
     -- =========================================================
 
     v_template_user_id uuid;
@@ -80,7 +80,7 @@ BEGIN
 
     IF v_template_user_id IS NULL THEN
         RAISE EXCEPTION
-            'No se encontró el usuario template "%". Ejecuta primero el seed demo o usa otro template.',
+            'No se encontró el usuario template "%". Usa un usuario real existente como template.',
             v_template_username;
     END IF;
 
@@ -113,7 +113,7 @@ BEGIN
                 'username', v_new_username,
                 'display_name', v_new_display_name,
                 'full_name', v_new_display_name,
-                'seed_source', 'add_auth_user_from_template_actual_schema.sql',
+                'provision_source', 'add_auth_user_from_template_actual_schema.sql',
                 'auth_template_username', v_template_username
             )
         )
@@ -233,10 +233,8 @@ COMMIT;
 -- ORDER BY organization_id;
 
 -- 4) Login esperado:
--- Si v_template_username = 'julio' o 'maria' y el seed demo está aplicado,
--- entonces el nuevo usuario entra con la misma contraseña del template
--- (por ejemplo demo123).
+-- El nuevo usuario entra con la misma contraseña del usuario template.
 --
 -- curl -X POST http://127.0.0.1:8000/api/v1/auth/login \
 --   -H "Content-Type: application/json" \
---   -d '{"username":"nuevo_analista","password":"demo123"}'
+--   -d '{"username":"nuevo_analista","password":"<password_template>"}'

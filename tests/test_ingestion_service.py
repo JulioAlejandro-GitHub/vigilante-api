@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.db import get_session
-from app.ingestion.fixtures import load_fixture_event
+from tests.helpers.fixtures import load_fixture_event
 from app.services.events import (
     get_timeline_by_source_event_id,
     ingest_event,

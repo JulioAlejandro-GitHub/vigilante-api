@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.db import get_session
-from app.ingestion.fixtures import load_fixture_event
+from tests.helpers.fixtures import load_fixture_event
 from app.main import app
 from app.services.case_assignment_service import CaseAssignRequest, CaseUnassignRequest, assign_case, unassign_case
 from app.services.case_lifecycle_service import CaseStatusChangeRequest, change_case_status

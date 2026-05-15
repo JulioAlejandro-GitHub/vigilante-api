@@ -80,7 +80,7 @@ class Settings(BaseSettings):
 
     @property
     def live_projection_is_enabled(self) -> bool:
-        return self.live_event_projection_enabled and self.app_env in {"local", "dev", "development", "demo"}
+        return self.live_event_projection_enabled and self.app_env in {"local", "dev", "development"}
 
     @property
     def recognition_database_url(self) -> str:

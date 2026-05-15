@@ -4,7 +4,7 @@ API operativa de Vigilante con timeline forense, manual reviews, case suggestion
 
 ## Qué implementa
 
-- ingesta por fixture de eventos de `vigilante-recognition`;
+- ingesta de eventos reales publicados por `vigilante-recognition`;
 - idempotencia por `event_id`;
 - persistencia del envelope original en `api.timeline_event.payload.source_event`;
 - timeline forense consultable;
@@ -60,8 +60,8 @@ Login:
 
 ```json
 {
-  "username": "julio",
-  "password": "demo123"
+  "username": "<usuario_operador>",
+  "password": "<password_operador>"
 }
 ```
 
@@ -74,9 +74,9 @@ Respuesta:
   "expires_at": "2026-04-26T18:00:00Z",
   "user": {
     "user_id": "00000000-0000-0000-0000-000000000101",
-    "username": "julio",
-    "email": "julio@example.test",
-    "display_name": "Julio Analyst",
+    "username": "<usuario_operador>",
+    "email": "operador@example.com",
+    "display_name": "Operador Vigilante",
     "role": "analyst",
     "roles": ["analyst"],
     "is_active": true,
@@ -207,32 +207,6 @@ en `api.camera.metadata.recognition`. Estructura esperada:
 }
 ```
 
-### Cámara local smoke-ready
-
-El stack local usa una cámara determinística para cerrar el smoke E2E de camera
-recommendations con el mismo `camera_id` en API/web e ingestion:
-
-```bash
-cd ../GIT
-./vigilante_stack.sh prepare-smoke-camera
-```
-
-El comando siembra los usuarios demo, crea o actualiza una fila `api.camera`
-con `metadata.smoke.is_smoke_ready=true`, la asigna al site visible por el
-usuario `julio`, la deja `is_active=true` y `source_type='rtsp'`, y escribe
-`.local-logs/run/smoke-camera.env`. Por default usa:
-
-- `camera_id=11111111-1111-1111-1111-111111111111`
-- `external_camera_key=smoke_rtsp_local_001`
-- `stream_url=rtsp://127.0.0.1:8554/cam01`
-
-Variables operativas: `SMOKE_CAMERA_ID`, `SMOKE_CAMERA_EXTERNAL_KEY`,
-`SMOKE_CAMERA_RTSP_URL`, `SMOKE_CAMERA_RTSP_TRANSPORT`,
-`SMOKE_CAMERA_USERNAME`, `DEMO_USER` y `DEMO_PASS`.
-
-`vigilante-ingestion` lee esa metadata directamente desde DB, la sanea y solo
-transporta los campos necesarios hacia recognition.
-
 ## Workflow de recomendaciones de cámara
 
 `vigilante-api` lee recomendaciones persistidas por `vigilante-recognition`
@@ -334,20 +308,20 @@ Este slice no auto-crea casos. Los `cases` reales aparecen cuando una suggestion
 live se acepta y se promueve con el flujo existente
 `POST /api/v1/case-suggestions/{suggestion_id}/resolve` y
 `POST /api/v1/case-suggestions/{suggestion_id}/promote`. Mientras exista
-evidencia live en timeline, los casos compuestos exclusivamente por fixtures se
-ocultan por defecto para que `/api/v1/cases` no quede dominado por demo
-historico.
+evidencia live en timeline, los casos compuestos exclusivamente por fixtures de
+test se ocultan por defecto para que `/api/v1/cases` no quede dominado por datos
+artificiales.
 
 La heurística explícita es:
 
-- fixture/demo: refs que empiezan con `tests/fixtures/`;
+- fixture de test: refs que empiezan con `tests/fixtures/`;
 - live: refs que empiezan con `s3://` o `minio://`.
 
 Cuando existe evidencia live, los listados ordenan primero los recursos con refs
 live y relegan refs fixture. En `case-suggestions` y `cases`, los recursos
 compuestos exclusivamente por fixtures se ocultan por defecto mientras exista
 evidencia live en timeline. Si no hay evidencia live, los fixtures siguen
-apareciendo como fallback de demo/test.
+apareciendo solo como fallback de test.
 
 Se puede cambiar ese comportamiento local con:
 
@@ -465,66 +439,41 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 PYTHONPATH=. pytest
-PYTHONPATH=. python3 scripts/seed_demo_auth.py
 uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
-El seed demo es solo para desarrollo local contra la BD PostgreSQL instalada. No ejecuta DDL ni migraciones: valida que existan las tablas/columnas de `api` y `auth`, usa el hasher real PBKDF2-SHA256 del backend y hace upserts idempotentes de organizaciones, sitios, roles, usuarios y scopes demo.
-
-Se puede ejecutar repetidas veces:
-
-```bash
-PYTHONPATH=. python3 scripts/seed_demo_auth.py
-PYTHONPATH=. python3 scripts/seed_demo_auth.py
-```
-
-Usuarios demo locales:
-
-- `julio` / `demo123`: `analyst`, scope org/site demo 1.
-- `maria` / `demo123`: `supervisor`, scope org/site demo 1 y 2.
-
-El password demo por defecto es `demo123`. Para cambiarlo en un entorno local antes de sembrar:
-
-```bash
-DEMO_AUTH_PASSWORD=otra-clave PYTHONPATH=. python3 scripts/seed_demo_auth.py
-```
-
-El script se niega a correr si `APP_ENV` no es `local`, `dev`, `development`, `demo` o `test`, y también se niega a correr sobre SQLite. Está pensado para desbloquear validación local/demo, no para producción.
+La BD debe contener usuarios reales en `auth.app_user`, roles y scopes antes de
+usar endpoints protegidos. El arranque operativo no crea usuarios, cámaras ni
+casos artificiales.
 
 ### Validación auth local
 
 Con `uvicorn` corriendo en `127.0.0.1:8001`:
 
 ```bash
-JULIO_TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
+export VIGILANTE_USERNAME=<usuario_operador>
+export VIGILANTE_PASSWORD=<password_operador>
+
+API_TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
-  -d '{"username":"julio","password":"demo123"}' \
+  -d "{\"username\":\"$VIGILANTE_USERNAME\",\"password\":\"$VIGILANTE_PASSWORD\"}" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
 curl -s http://127.0.0.1:8001/api/v1/auth/me \
-  -H "authorization: Bearer $JULIO_TOKEN"
-
-MARIA_TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
-  -H 'content-type: application/json' \
-  -d '{"username":"maria","password":"demo123"}' \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
-
-curl -s http://127.0.0.1:8001/api/v1/auth/me \
-  -H "authorization: Bearer $MARIA_TOKEN"
+  -H "authorization: Bearer $API_TOKEN"
 
 curl -i -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
-  -d '{"username":"julio","password":"wrong"}'
+  -d "{\"username\":\"$VIGILANTE_USERNAME\",\"password\":\"wrong\"}"
 
 curl -s http://127.0.0.1:8001/api/v1/cases \
-  -H "authorization: Bearer $JULIO_TOKEN"
+  -H "authorization: Bearer $API_TOKEN"
 ```
 
 Resultado esperado:
 
-- login de `julio` devuelve `200`, `role: analyst`, org `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1` y site `bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1`;
-- login de `maria` devuelve `200`, `role: supervisor`, orgs demo 1 y 2, y sites demo 1 y 2;
-- `/api/v1/auth/me` devuelve el usuario actual autenticado para ambos tokens;
+- login devuelve `200`, roles reales y scope real de organización/sitio;
+- `/api/v1/auth/me` devuelve el usuario actual autenticado;
 - credenciales erróneas devuelven `401`;
 - endpoints protegidos aceptan el bearer token válido.
 
@@ -538,7 +487,8 @@ npm install
 npm run dev
 ```
 
-Abrir `http://127.0.0.1:5173/login` y autenticar con `julio / demo123` o `maria / demo123`.
+Abrir `http://127.0.0.1:5173/login` y autenticar con un usuario real de
+`auth.app_user`.
 
 En desarrollo, `vigilante-web` usa el proxy de Vite para reenviar `/api/*` a `VITE_API_BASE_URL` (`http://127.0.0.1:8001` por defecto). El flujo real usado por la web es:
 
@@ -552,7 +502,7 @@ En desarrollo, `vigilante-web` usa el proxy de Vite para reenviar `/api/*` a `VI
 ```bash
 TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
-  -d '{"username":"julio","password":"demo123"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+  -d "{\"username\":\"$VIGILANTE_USERNAME\",\"password\":\"$VIGILANTE_PASSWORD\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
 curl http://127.0.0.1:8001/health
 curl http://127.0.0.1:8001/api/v1/auth/me -H "authorization: Bearer $TOKEN"
@@ -575,7 +525,7 @@ Promover una suggestion requiere supervisor:
 ```bash
 SUPERVISOR_TOKEN=$(curl -s http://127.0.0.1:8001/api/v1/auth/login \
   -H 'content-type: application/json' \
-  -d '{"username":"maria","password":"demo123"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+  -d "{\"username\":\"$VIGILANTE_SUPERVISOR_USERNAME\",\"password\":\"$VIGILANTE_SUPERVISOR_PASSWORD\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
 curl -X POST http://127.0.0.1:8001/api/v1/case-suggestions/<suggestion_id>/promote \
   -H "authorization: Bearer $SUPERVISOR_TOKEN" \

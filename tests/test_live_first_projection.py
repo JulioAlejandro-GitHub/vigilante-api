@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.db import get_session
-from app.ingestion.fixtures import load_fixture_event
+from tests.helpers.fixtures import load_fixture_event
 from app.main import app
 from app.services.case_query_service import list_cases_filtered
 from app.services.case_record_service import PromoteCaseSuggestionRequest, list_cases
