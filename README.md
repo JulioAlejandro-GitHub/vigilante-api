@@ -19,6 +19,8 @@ API operativa de Vigilante con timeline forense, manual reviews, case suggestion
 - RBAC mínimo para `analyst` y `supervisor`;
 - scope por organización y sitio usando `auth.user_organization_scope`;
 - enriquecimiento on-demand de evidencia contra `vigilante-media`;
+- endpoint liviano de ultimo frame por camara desde el outbox `frame.ingested` de
+  `vigilante-ingestion`, para UI live-first antes de recognition;
 - proyección oportunista live-first desde eventos recientes de `vigilante-recognition`;
 - proyección mínima de case suggestions live desde evidencia reciente cuando recognition
   aún no emite un `case_suggestion_created` explícito;
@@ -123,6 +125,18 @@ Todos los endpoints bajo `/api/v1` requieren Bearer token excepto `/api/v1/auth/
 
 - `GET /api/v1/timeline`
 - `GET /api/v1/timeline/{source_event_id}`
+
+### Cámaras live-first
+
+- `GET /api/v1/cameras`
+- `GET /api/v1/cameras/latest-frames?camera_id=<uuid>&include_media=true`
+
+`latest-frames` lee el outbox JSONL configurado con `INGESTION_OUTBOX_PATH`
+(default `../vigilante-ingestion/outbox/frame_ingested.jsonl`), conserva el
+ultimo `frame.ingested` por camara y resuelve solo esos refs con
+`vigilante-media`. Opcionalmente toma estado de workers desde
+`INGESTION_HEALTH_BASE_URL` (default `http://127.0.0.1:8088`) para distinguir
+offline/degraded/no iniciada por concurrencia.
 
 ### Manual reviews
 
