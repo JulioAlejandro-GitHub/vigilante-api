@@ -135,7 +135,7 @@ Todos los endpoints bajo `/api/v1` requieren Bearer token excepto `/api/v1/auth/
 (default `../vigilante-ingestion/outbox/frame_ingested.jsonl`), conserva el
 ultimo `frame.ingested` por camara y resuelve solo esos refs con
 `vigilante-media`. Opcionalmente toma estado de workers desde
-`INGESTION_HEALTH_BASE_URL` (default `http://127.0.0.1:8088`) para distinguir
+`INGESTION_HEALTH_BASE_URL` (default `http://127.0.0.1:8090`) para distinguir
 offline/degraded/no iniciada por concurrencia.
 
 ### Manual reviews

@@ -43,7 +43,7 @@ class CameraLatestFrameRead(BaseModel):
     content_type: str | None = None
     width: int | None = None
     height: int | None = None
-    state: str = "no_snapshot"
+    state: str = "no_frame_yet"
     reason: str | None = None
     media: EvidenceMediaItem | None = None
     ingestion: CameraIngestionStateRead | None = None
@@ -83,8 +83,9 @@ def list_camera_latest_frames(
 ) -> list[CameraLatestFrameRead]:
     resolved_settings = settings or get_settings()
     cameras = _load_cameras(session, camera_ids)
+    outbox_path = _resolve_outbox_path(resolved_settings.ingestion_outbox_path)
     latest_by_camera = _load_latest_outbox_frames(
-        Path(resolved_settings.ingestion_outbox_path),
+        outbox_path,
         max_lines=max(1, resolved_settings.ingestion_outbox_tail_max_lines),
         max_bytes=max(1024, resolved_settings.ingestion_outbox_tail_max_bytes),
     )
@@ -106,13 +107,14 @@ def list_camera_latest_frames(
         results.append(_build_latest_frame_read(camera_id, camera=camera, frame=frame, media=media, ingestion=ingestion, now=now))
 
     logger.info(
-        "camera_latest_frames_loaded cameras=%s frames=%s media_requested=%s media_resolved=%s media_failed=%s health=%s",
+        "camera_latest_frames_loaded cameras=%s frames=%s media_requested=%s media_resolved=%s media_failed=%s health=%s outbox=%s",
         len(camera_ids),
         sum(1 for item in results if item.latest_frame_ref),
         requested_media,
         evidence_resolution.stats.resolved,
         evidence_resolution.stats.failed,
         len(ingestion_by_camera),
+        outbox_path,
     )
     return results
 
@@ -182,7 +184,7 @@ def _frame_state(
             return "degraded", f"ingestion_worker_{worker_state}"
         if worker_state == "stopped" and ingestion is not None and ingestion.is_desired_active:
             return "not_started_concurrency", ingestion.last_error or "not_started_by_concurrency_limit"
-        return "no_snapshot", "no_ingested_frame"
+        return "no_frame_yet", "no_ingested_frame"
 
     age = max(0.0, (now - frame.captured_at).total_seconds())
     if age <= 5:
@@ -220,9 +222,11 @@ def _load_latest_outbox_frames(path: Path, *, max_lines: int, max_bytes: int) ->
             invalid_lines += 1
             continue
         frame = _frame_from_event(event)
-        if frame is None or frame.camera_id in frames:
+        if frame is None:
             continue
-        frames[frame.camera_id] = frame
+        current = frames.get(frame.camera_id)
+        if current is None or frame.captured_at >= current.captured_at:
+            frames[frame.camera_id] = frame
 
     _OUTBOX_CACHE.path = resolved_path
     _OUTBOX_CACHE.mtime_ns = stat.st_mtime_ns
@@ -261,14 +265,21 @@ def _tail_lines(path: Path, *, max_lines: int, max_bytes: int) -> list[str]:
 
 
 def _frame_from_event(event: dict[str, Any]) -> _OutboxFrame | None:
-    if event.get("event_type") != "frame.ingested":
+    event_type = _as_text(event.get("event_type") or event.get("type"))
+    if event_type not in {"frame.ingested", "frame_ingested"}:
         return None
-    payload = event.get("payload")
-    if not isinstance(payload, dict):
-        return None
-    camera_id = _as_text(payload.get("camera_id") or (event.get("context") or {}).get("camera_id"))
-    frame_ref = _as_text(payload.get("frame_ref") or payload.get("frame_uri"))
-    captured_at = _parse_datetime(payload.get("captured_at") or event.get("occurred_at"))
+    payload = event.get("payload") if isinstance(event.get("payload"), dict) else event
+    context = event.get("context") if isinstance(event.get("context"), dict) else {}
+    camera_id = _as_text(payload.get("camera_id") or context.get("camera_id") or event.get("camera_id"))
+    frame_ref = _as_text(payload.get("frame_ref") or payload.get("frame_uri") or payload.get("source_frame_ref") or event.get("frame_ref"))
+    captured_at = _parse_datetime(
+        payload.get("captured_at")
+        or payload.get("frame_captured_at")
+        or payload.get("timestamp")
+        or event.get("occurred_at")
+        or event.get("emitted_at")
+        or event.get("created_at")
+    )
     if not camera_id or not frame_ref or captured_at is None:
         return None
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
@@ -282,6 +293,22 @@ def _frame_from_event(event: dict[str, Any]) -> _OutboxFrame | None:
         height=_as_int(payload.get("height")),
         metadata=dict(metadata),
     )
+
+
+def _resolve_outbox_path(raw_path: str) -> Path:
+    configured = Path(raw_path).expanduser()
+    if configured.is_absolute():
+        return configured
+
+    candidates = [
+        Path.cwd() / configured,
+        Path(__file__).resolve().parents[2] / configured,
+        Path(__file__).resolve().parents[3] / configured,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[1]
 
 
 def _load_ingestion_health(settings: Settings) -> dict[str, CameraIngestionStateRead]:

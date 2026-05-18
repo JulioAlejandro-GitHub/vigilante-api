@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     ingestion_outbox_path: str = "../vigilante-ingestion/outbox/frame_ingested.jsonl"
     ingestion_outbox_tail_max_lines: int = 5000
     ingestion_outbox_tail_max_bytes: int = 4 * 1024 * 1024
-    ingestion_health_base_url: str | None = "http://127.0.0.1:8088"
+    ingestion_health_base_url: str | None = "http://127.0.0.1:8090"
     ingestion_health_timeout_seconds: float = 0.2
     live_event_projection_enabled: bool = True
     live_projection_max_events: int = 200
